@@ -346,3 +346,5 @@ if __name__ == "__main__":
           git add -A
           git commit -m 'fix(DEN-1057): format, lock, test, and harden CI'
           git push origin HEAD:agent/den-1057-meta-agent-control-plane
+
+# trigger-generation: 1
