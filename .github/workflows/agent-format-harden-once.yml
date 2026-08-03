@@ -1,9 +1,8 @@
 name: DEN-1057 apply formatting and lockfile once
 
 on:
-  push:
-    branches:
-      - agent/den-1057-meta-agent-control-plane
+  pull_request:
+    branches: [main]
     paths:
       - .github/workflows/agent-format-harden-once.yml
 
@@ -16,6 +15,11 @@ concurrency:
 
 jobs:
   apply:
+    if: >-
+      github.event.pull_request.number == 1 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/den-1057-meta-agent-control-plane' &&
+      github.actor == 'ORESoftware'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -74,7 +78,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: format-lock-drift-${{ github.workflow }}-${{ github.ref }}
+  group: format-lock-drift-candidate
   cancel-in-progress: true
 
 jobs:
