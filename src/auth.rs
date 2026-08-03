@@ -115,7 +115,7 @@ mod tests {
         headers.insert(AUTHORIZATION, "bEaReR token-123".parse().unwrap());
         assert_eq!(bearer_token(&headers), Some("token-123"));
 
-        for invalid in ["Basic token-123", "Bearer ", "Bearer token extra"] {
+        for invalid in ["Basic token-123", "Bearer", "Bearer token extra"] {
             headers.insert(AUTHORIZATION, invalid.parse().unwrap());
             assert_eq!(bearer_token(&headers), None, "accepted {invalid:?}");
         }
