@@ -31,14 +31,9 @@ jobs:
           persist-credentials: false
 
       - name: Validate every GitHub Actions workflow
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/repo" \
-            -w /repo \
-            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
-            .github/workflows/*.yml
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: .github/workflows/*.yml
 
       - name: Run repository workflow contracts
         run: python3 -m unittest -v scripts/ci/test_workflow_contract.py
