@@ -1,3 +1,4 @@
+# Triggered after repairing the permanent workflow contract.
 name: DEN-1057 one-shot formatting and CI hardening
 
 on:
