@@ -1,6 +1,6 @@
 use std::{fmt, sync::Arc};
 
-use axum::http::{HeaderMap, header::AUTHORIZATION};
+use axum::http::{header::AUTHORIZATION, HeaderMap};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
@@ -76,7 +76,10 @@ impl AuthPolicy {
 pub fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.split_once(' ')?;
-    if scheme.eq_ignore_ascii_case("bearer") && !token.is_empty() {
+    if scheme.eq_ignore_ascii_case("bearer")
+        && !token.is_empty()
+        && !token.bytes().any(|byte| byte.is_ascii_whitespace())
+    {
         Some(token)
     } else {
         None
@@ -104,5 +107,56 @@ mod tests {
         );
         assert!(policy.authorize_ingest(Some("wrong-token-value")).is_err());
         assert!(policy.authorize_ingest(None).is_err());
+    }
+
+    #[test]
+    fn bearer_parser_is_case_insensitive_and_rejects_whitespace() {
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, "bEaReR token-123".parse().unwrap());
+        assert_eq!(bearer_token(&headers), Some("token-123"));
+
+        for invalid in ["Basic token-123", "Bearer ", "Bearer token extra"] {
+            headers.insert(AUTHORIZATION, invalid.parse().unwrap());
+            assert_eq!(bearer_token(&headers), None, "accepted {invalid:?}");
+        }
+    }
+
+    #[test]
+    fn authorization_header_precedes_query_token_and_malformed_header_falls_back() {
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, "Bearer header-token".parse().unwrap());
+        assert_eq!(
+            preferred_token(&headers, Some("query-token")),
+            Some("header-token")
+        );
+
+        headers.insert(AUTHORIZATION, "Basic ignored".parse().unwrap());
+        assert_eq!(
+            preferred_token(&headers, Some("query-token")),
+            Some("query-token")
+        );
+    }
+
+    #[test]
+    fn unprotected_reads_do_not_disable_ingest_authentication() {
+        let mut config = Config::local_test();
+        config.auth_token = Some("a-strong-enough-token".to_owned());
+        config.protect_read_api = false;
+        let policy = AuthPolicy::from_config(&config);
+
+        assert!(policy.authorize_read(None).is_ok());
+        assert!(policy.authorize_ingest(None).is_err());
+        assert!(policy.ingestion_is_protected());
+        assert!(!policy.reads_are_protected());
+    }
+
+    #[test]
+    fn debug_output_never_contains_the_configured_token() {
+        let mut config = Config::local_test();
+        config.auth_token = Some("do-not-log-this-token".to_owned());
+        let output = format!("{:?}", AuthPolicy::from_config(&config));
+
+        assert!(output.contains("token_configured: true"));
+        assert!(!output.contains("do-not-log-this-token"));
     }
 }
