@@ -1,78 +1,72 @@
-# Triggered after repairing the permanent workflow contract.
-name: DEN-1057 one-shot formatting and CI hardening
+name: DEN-1057 formatting and lockfile artifact
 
 on:
-  push:
-    branches:
-      - agent/den-1057-meta-agent-control-plane
+  pull_request:
     paths:
       - .github/workflows/agent-format-harden-once.yml
+      - Cargo.toml
+      - src/**
+      - tests/**
+      - dashboard/**
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: den-1057-format-harden-once
-  cancel-in-progress: false
+  group: den-1057-format-artifact-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  apply:
+  prepare:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
-      - name: Check out exact implementation branch
+      - name: Check out the exact candidate without persisted credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: agent/den-1057-meta-agent-control-plane
-          fetch-depth: 0
-          persist-credentials: true
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
 
-      - name: Install pinned Rust toolchain
+      - name: Install pinned Rust formatting toolchain
         uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b
         with:
           toolchain: 1.97.1
-          components: rustfmt,clippy
+          components: rustfmt
 
-      - name: Format sources and create the committed lockfile
+      - name: Produce deterministic formatting patch and lockfile
         shell: bash
         run: |
           set -euo pipefail
+          umask 077
+
+          artifact_dir="${RUNNER_TEMP}/den-1057-format-lock"
+          mkdir -p "$artifact_dir"
+          chmod 700 "$artifact_dir"
+
           cargo fmt --all
           cargo generate-lockfile
           test -s Cargo.lock
-
-      - name: Validate permanent workflows and repository contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/repo" \
-            -w /repo \
-            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
-            .github/workflows/ci.yml \
-            .github/workflows/workflow-contract.yml
-          python3 -m unittest -v scripts/ci/test_workflow_contract.py
-          cargo fmt --all --check
-          cargo clippy --workspace --all-targets --locked -- -D warnings
-          cargo test --workspace --all-targets --locked
-          bash tests/contract-fixtures.sh
-          node --check dashboard/app.js
-          docker build --tag meta-agent-control-plane:ci .
+          cargo metadata --locked --no-deps --format-version 1 > "$artifact_dir/cargo-metadata.json"
+          git diff --binary -- . > "$artifact_dir/formatted.patch"
+          git diff --name-only -- . > "$artifact_dir/formatted-files.txt"
+          cp Cargo.lock "$artifact_dir/Cargo.lock"
           git diff --check
-          ! grep -R --line-number -E '^(<{7}|={7}|>{7})' \
-            .github/workflows/ci.yml \
-            .github/workflows/workflow-contract.yml \
-            scripts/ci \
-            src \
-            tests
 
-      - name: Commit permanent changes and remove this helper
-        shell: bash
-        run: |
-          set -euo pipefail
-          git rm .github/workflows/agent-format-harden-once.yml
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git commit -m 'fix(DEN-1057): format, lock, test, and harden CI'
-          git push origin HEAD:agent/den-1057-meta-agent-control-plane
+          head_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          {
+            printf 'head_sha=%s\n' "$head_sha"
+            printf 'rustc=%s\n' "$(rustc --version)"
+            printf 'cargo=%s\n' "$(cargo --version)"
+            printf 'lock_sha256=%s\n' "$(sha256sum Cargo.lock | cut -d' ' -f1)"
+            printf 'patch_sha256=%s\n' "$(sha256sum "$artifact_dir/formatted.patch" | cut -d' ' -f1)"
+          } > "$artifact_dir/evidence.txt"
+
+      - name: Upload formatting evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: den-1057-format-lock-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/den-1057-format-lock/
+          if-no-files-found: error
+          retention-days: 3
