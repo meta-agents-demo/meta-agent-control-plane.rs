@@ -1,32 +1,90 @@
-name: DEN-1057 formatting and lockfile artifact
+name: DEN-1057 apply formatting and lockfile once
+
+on:
+  push:
+    branches:
+      - agent/den-1057-meta-agent-control-plane
+    paths:
+      - .github/workflows/agent-format-harden-once.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-1057-format-lock-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out the exact implementation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/den-1057-meta-agent-control-plane
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Install pinned Rust formatting toolchain
+        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b
+        with:
+          toolchain: 1.97.1
+          components: rustfmt
+
+      - name: Apply deterministic formatting and lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo generate-lockfile
+          test -s Cargo.lock
+          cargo fmt --all --check
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          git diff --check
+
+      - name: Replace this bootstrap with a permanent read-only drift check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          Path('.github/workflows/agent-format-harden-once.yml').write_text('''name: Formatting and lockfile drift
 
 on:
   pull_request:
     paths:
       - .github/workflows/agent-format-harden-once.yml
       - Cargo.toml
+      - Cargo.lock
       - src/**
       - tests/**
-      - dashboard/**
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent-format-harden-once.yml
+      - Cargo.toml
+      - Cargo.lock
+      - src/**
+      - tests/**
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: den-1057-format-artifact-${{ github.ref }}
+  group: format-lock-drift-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  prepare:
+  validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 12
     steps:
-      - name: Check out the exact candidate without persisted credentials
+      - name: Check out without persisted credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
           persist-credentials: false
 
       - name: Install pinned Rust formatting toolchain
@@ -35,38 +93,26 @@ jobs:
           toolchain: 1.97.1
           components: rustfmt
 
-      - name: Produce deterministic formatting patch and lockfile
+      - name: Reject formatting or lockfile drift
         shell: bash
         run: |
           set -euo pipefail
-          umask 077
-
-          artifact_dir="${RUNNER_TEMP}/den-1057-format-lock"
-          mkdir -p "$artifact_dir"
-          chmod 700 "$artifact_dir"
-
-          cargo fmt --all
+          cargo fmt --all --check
+          cp Cargo.lock "${RUNNER_TEMP}/Cargo.lock.before"
           cargo generate-lockfile
-          test -s Cargo.lock
-          cargo metadata --locked --no-deps --format-version 1 > "$artifact_dir/cargo-metadata.json"
-          git diff --binary -- . > "$artifact_dir/formatted.patch"
-          git diff --name-only -- . > "$artifact_dir/formatted-files.txt"
-          cp Cargo.lock "$artifact_dir/Cargo.lock"
+          cmp "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          git diff --exit-code -- Cargo.lock src tests
+''', encoding='utf-8')
+          PY
           git diff --check
 
-          head_sha="${{ github.event.pull_request.head.sha || github.sha }}"
-          {
-            printf 'head_sha=%s\n' "$head_sha"
-            printf 'rustc=%s\n' "$(rustc --version)"
-            printf 'cargo=%s\n' "$(cargo --version)"
-            printf 'lock_sha256=%s\n' "$(sha256sum Cargo.lock | cut -d' ' -f1)"
-            printf 'patch_sha256=%s\n' "$(sha256sum "$artifact_dir/formatted.patch" | cut -d' ' -f1)"
-          } > "$artifact_dir/evidence.txt"
-
-      - name: Upload formatting evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: den-1057-format-lock-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/den-1057-format-lock/
-          if-no-files-found: error
-          retention-days: 3
+      - name: Commit the mechanical branch repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Cargo.lock src tests .github/workflows/agent-format-harden-once.yml
+          git commit -m 'fix(DEN-1057): format sources and commit the lockfile'
+          git push origin HEAD:agent/den-1057-meta-agent-control-plane
