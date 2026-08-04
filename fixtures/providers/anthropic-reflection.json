@@ -1,0 +1,33 @@
+{
+  "message_id": "msg-anthropic-demo-1",
+  "context": {
+    "agent_id": "anthropic-demo-agent",
+    "model": "claude-opus",
+    "instance_id": "mock-anthropic-1",
+    "session_id": "parallel-demo-session",
+    "correlation_id": "parallel-demo-goal",
+    "sequence": 2
+  },
+  "observation": "reflection",
+  "task_id": "review-risk-boundaries",
+  "summary": "The highest remaining risk is an untested transport boundary.",
+  "confidence": 0.82,
+  "assumptions": [
+    "The exact-head CI result is the authoritative build signal."
+  ],
+  "evidence": [
+    {
+      "kind": "test",
+      "reference": "mock-ci/run-42",
+      "summary": "Deterministic provider fixture validation"
+    }
+  ],
+  "alternatives_considered": [
+    "Rely only on unit tests",
+    "Exercise a real daemon process"
+  ],
+  "risks": [
+    "A client acknowledgement could be accepted from the wrong transport."
+  ],
+  "next_action": "Run the real-daemon transport conformance test."
+}
