@@ -4,6 +4,7 @@ pub mod auth;
 pub mod config;
 pub mod daemon;
 pub mod http;
+pub mod metacognition;
 pub mod model;
 pub mod openapi;
 pub mod provider;
