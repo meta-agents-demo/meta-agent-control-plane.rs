@@ -116,9 +116,13 @@ for route in ('"/coordination"', '"/api/v1/coordination"'):
     if route not in coordination_api:
         errors.append(f"coordination router is missing {route}")
 
+explorer_ui = (ROOT / "src/explorer_ui.rs").read_text()
 explorer_api = (ROOT / "src/explorer_api.rs").read_text()
-if '"/api/v1/explorer"' not in explorer_api:
-    errors.append("explorer router is missing /api/v1/explorer")
+if 'include_str!("../scripts/explorer-dashboard.js")' not in explorer_ui:
+    errors.append("explorer UI is not wired to scripts/explorer-dashboard.js")
+for route in ('"/explorer"', '"/api/v1/explorer"'):
+    if route not in explorer_api:
+        errors.append(f"explorer router is missing {route}")
 if "authorize_read" not in explorer_api:
     errors.append("explorer API is not protected by the read authorization boundary")
 

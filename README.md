@@ -119,7 +119,7 @@ Open `/coordination` for the Leptos operator view or read `GET /api/v1/coordinat
 
 ## Bounded operator explorer
 
-`GET /api/v1/explorer` derives an operator-oriented read model from one coherent bounded snapshot. It returns agents in stable ID order, retained session summaries, a deterministic recent-event timeline, retained lessons, cache pressure and evictions, transport counters, uptime, and explicit counts for events, sessions, and lessons omitted by the requested response limits.
+Open `/explorer` for the Leptos operator view or read `GET /api/v1/explorer` with the configured read token. The explorer derives one operator-oriented read model from a coherent bounded snapshot: agents in stable ID order, retained session summaries, a deterministic recent-event timeline, retained lessons, cache pressure and evictions, ingestion counters, uptime, and explicit counts for events, sessions, and lessons omitted by the requested response limits.
 
 ```bash
 curl --fail-with-body \
@@ -127,7 +127,9 @@ curl --fail-with-body \
   'http://127.0.0.1:8787/api/v1/explorer?timeline_limit=100&session_limit=100&lesson_limit=250'
 ```
 
-The endpoint authenticates before parsing limits. Overrides apply only to that response, cannot mutate daemon configuration or store recency, and are independently capped by the server. Session summaries are derived only from currently retained recent events; absence from the response is never represented as historical absence. See [`docs/operator-explorer.md`](docs/operator-explorer.md) for retention semantics, ordering guarantees, limits, and test coverage.
+The endpoint authenticates before parsing limits. Overrides apply only to that response, cannot mutate daemon configuration or store recency, and are independently capped by the server. Session summaries are derived only from currently retained recent events; absence from the response is never represented as historical absence.
+
+The page keeps the token in session storage, sends it only as a Bearer header or first same-origin `/ws/ui` message, coalesces newer revisions and lag-resync notices into bounded refetches, reconnects with capped exponential backoff, and retains a 30-second safety poll. Client filtering operates only on the already returned retained projection, and every dynamic value is escaped before HTML insertion. See [`docs/operator-explorer.md`](docs/operator-explorer.md) for retention semantics, ordering guarantees, limits, live-update behavior, and test coverage.
 
 ## Bounded in-memory state
 
@@ -162,12 +164,13 @@ Agent registration, goal/task definitions, task start/completion, and learned le
 | `/` | Leptos SSR operator dashboard |
 | `/metacognition` | Explainable metacognition dashboard |
 | `/coordination` | Deterministic coordination-plan dashboard |
+| `/explorer` | Agents, retained sessions, timeline, lessons, and system-pressure dashboard |
 | `/healthz` | Liveness and current revision |
 | `/readyz` | Readiness |
 | `/metrics` | Prometheus text exposition |
 | `/openapi.json` | Runtime OpenAPI document |
 | `/api/v1/snapshot` | Current bounded projection |
-| `/api/v1/explorer` | Agents, retained sessions, timeline, lessons, and system pressure |
+| `/api/v1/explorer` | Bounded operator explorer projection |
 | `/api/v1/metacognition` | Deterministic diagnostic projection |
 | `/api/v1/coordination` | Deterministic dependency-safe coordination plan |
 | `/api/v1/events` | HTTP event ingestion |
@@ -189,8 +192,10 @@ cargo test --workspace --all-targets --locked
 node --check scripts/dashboard.js
 node --check scripts/metacognition-dashboard.js
 node --check scripts/coordination-dashboard.js
+node --check scripts/explorer-dashboard.js
 python3 scripts/verify_contract.py
 python3 scripts/test_coordination_dashboard.py
+python3 scripts/test_explorer_dashboard.py
 ```
 
 CI runs the real-daemon client transport tests and executes the provider sidecar binary against deterministic fixtures. It also builds the OCI image from `Cargo.lock`, verifies its non-root entrypoint, boots it with a read-only root and dropped capabilities, and probes liveness and readiness.
@@ -221,7 +226,8 @@ Terminate TLS at a trusted reverse proxy for remote HTTP/WebSocket deployments. 
 src/model.rs                  versioned provider-neutral protocol
 src/store.rs                  bounded projections and semantic reducer
 src/explorer.rs               deterministic agents/sessions/timeline/lesson projection
-src/explorer_api.rs           protected bounded operator explorer API
+src/explorer_api.rs           protected bounded operator explorer API and page route
+src/explorer_ui.rs            Leptos explorer dashboard
 src/metacognition/            deterministic explainable analysis engine
 src/metacognition_api.rs      protected analysis API
 src/metacognition_ui.rs       Leptos analysis dashboard
