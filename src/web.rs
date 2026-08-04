@@ -3,7 +3,7 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    coordination_api,
+    coordination_api, explorer_api,
     http::{self, AppState},
     metacognition_api,
 };
@@ -11,7 +11,8 @@ use crate::{
 pub fn router(state: AppState) -> Router {
     http::router(state.clone())
         .merge(metacognition_api::router(state.clone()))
-        .merge(coordination_api::router(state))
+        .merge(coordination_api::router(state.clone()))
+        .merge(explorer_api::router(state))
 }
 
 pub async fn serve(
@@ -54,7 +55,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn combined_router_serves_all_operator_pages_and_protects_coordination_api() {
+    async fn combined_router_serves_operator_pages_and_protects_read_apis() {
         let app = router(test_state());
         for path in ["/", "/metacognition", "/coordination"] {
             let response = app
@@ -65,15 +66,13 @@ mod tests {
             assert_eq!(response.status(), StatusCode::OK, "path {path}");
         }
 
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/coordination")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        for path in ["/api/v1/coordination", "/api/v1/explorer"] {
+            let response = app
+                .clone()
+                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "path {path}");
+        }
     }
 }

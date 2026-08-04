@@ -117,6 +117,18 @@ The coordination planner turns the same bounded snapshot and explainable diagnos
 
 Open `/coordination` for the Leptos operator view or read `GET /api/v1/coordination` with the configured read token. Both surfaces are advisory and read-only: they do not dispatch work, mutate task ownership, or call any provider. The page authenticates to same-origin `/ws/ui` with a first-message token frame, coalesces revision updates and lag-resync notices into bounded refetches, reconnects with capped exponential backoff, and retains a 30-second safety poll. The same planner is available offline through `meta-agent-plan`; see [`docs/coordination-planner.md`](docs/coordination-planner.md) for policy limits and deterministic semantics.
 
+## Bounded operator explorer
+
+`GET /api/v1/explorer` derives an operator-oriented read model from one coherent bounded snapshot. It returns agents in stable ID order, retained session summaries, a deterministic recent-event timeline, retained lessons, cache pressure and evictions, transport counters, uptime, and explicit counts for events, sessions, and lessons omitted by the requested response limits.
+
+```bash
+curl --fail-with-body \
+  -H 'authorization: Bearer replace-with-at-least-16-bytes' \
+  'http://127.0.0.1:8787/api/v1/explorer?timeline_limit=100&session_limit=100&lesson_limit=250'
+```
+
+The endpoint authenticates before parsing limits. Overrides apply only to that response, cannot mutate daemon configuration or store recency, and are independently capped by the server. Session summaries are derived only from currently retained recent events; absence from the response is never represented as historical absence. See [`docs/operator-explorer.md`](docs/operator-explorer.md) for retention semantics, ordering guarantees, limits, and test coverage.
+
 ## Bounded in-memory state
 
 The MVP deliberately has no database. `lru::LruCache` instances bound agents, goals, tasks, lessons, recent events, and the independent event-ID idempotency window. Capacities are configurable, pressure and evictions are exposed in the snapshot/UI/metrics, and domain storage is isolated behind the `Store` API so a durable backend can follow without changing transports.
@@ -155,6 +167,7 @@ Agent registration, goal/task definitions, task start/completion, and learned le
 | `/metrics` | Prometheus text exposition |
 | `/openapi.json` | Runtime OpenAPI document |
 | `/api/v1/snapshot` | Current bounded projection |
+| `/api/v1/explorer` | Agents, retained sessions, timeline, lessons, and system pressure |
 | `/api/v1/metacognition` | Deterministic diagnostic projection |
 | `/api/v1/coordination` | Deterministic dependency-safe coordination plan |
 | `/api/v1/events` | HTTP event ingestion |
@@ -207,6 +220,8 @@ Terminate TLS at a trusted reverse proxy for remote HTTP/WebSocket deployments. 
 ```text
 src/model.rs                  versioned provider-neutral protocol
 src/store.rs                  bounded projections and semantic reducer
+src/explorer.rs               deterministic agents/sessions/timeline/lesson projection
+src/explorer_api.rs           protected bounded operator explorer API
 src/metacognition/            deterministic explainable analysis engine
 src/metacognition_api.rs      protected analysis API
 src/metacognition_ui.rs       Leptos analysis dashboard

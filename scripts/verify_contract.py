@@ -39,6 +39,7 @@ if RUST_UDP_KINDS != OPENAPI_UDP_KINDS:
 required_paths = {
     "/api/v1/coordination",
     "/api/v1/events",
+    "/api/v1/explorer",
     "/api/v1/metacognition",
     "/api/v1/snapshot",
     "/healthz",
@@ -57,23 +58,40 @@ expected_coordination_parameters = {
     "max_interventions": (1, 512, 32),
     "max_holds": (1, 1024, 64),
 }
-coordination_parameters = OPENAPI["paths"]["/api/v1/coordination"]["get"].get(
-    "parameters", []
-)
-observed_coordination_parameters = {
-    parameter.get("name"): (
-        parameter.get("schema", {}).get("minimum"),
-        parameter.get("schema", {}).get("maximum"),
-        parameter.get("schema", {}).get("default"),
-    )
-    for parameter in coordination_parameters
-    if parameter.get("in") == "query"
+expected_explorer_parameters = {
+    "timeline_limit": (1, 250, 100),
+    "session_limit": (1, 250, 100),
+    "lesson_limit": (1, 1000, 250),
 }
+
+
+def query_parameter_contract(path: str) -> dict[str, tuple[object, object, object]]:
+    parameters = OPENAPI["paths"][path]["get"].get("parameters", [])
+    return {
+        parameter.get("name"): (
+            parameter.get("schema", {}).get("minimum"),
+            parameter.get("schema", {}).get("maximum"),
+            parameter.get("schema", {}).get("default"),
+        )
+        for parameter in parameters
+        if parameter.get("in") == "query"
+    }
+
+
+observed_coordination_parameters = query_parameter_contract("/api/v1/coordination")
 if observed_coordination_parameters != expected_coordination_parameters:
     errors.append(
         "coordination policy parameter drift: "
         f"expected={expected_coordination_parameters!r}, "
         f"observed={observed_coordination_parameters!r}"
+    )
+
+observed_explorer_parameters = query_parameter_contract("/api/v1/explorer")
+if observed_explorer_parameters != expected_explorer_parameters:
+    errors.append(
+        "explorer policy parameter drift: "
+        f"expected={expected_explorer_parameters!r}, "
+        f"observed={observed_explorer_parameters!r}"
     )
 
 if CARGO["package"]["name"] != "meta-agent-control-plane":
@@ -98,6 +116,12 @@ for route in ('"/coordination"', '"/api/v1/coordination"'):
     if route not in coordination_api:
         errors.append(f"coordination router is missing {route}")
 
+explorer_api = (ROOT / "src/explorer_api.rs").read_text()
+if '"/api/v1/explorer"' not in explorer_api:
+    errors.append("explorer router is missing /api/v1/explorer")
+if "authorize_read" not in explorer_api:
+    errors.append("explorer API is not protected by the read authorization boundary")
+
 conflict_pattern = re.compile(r"^(<<<<<<<|=======|>>>>>>>)", re.M)
 for path in ROOT.rglob("*"):
     if path.is_file() and ".git" not in path.parts and path.suffix not in {".png", ".jpg", ".jpeg"}:
@@ -116,5 +140,6 @@ if errors:
 print(
     f"contract OK: {len(RUST_KINDS)} event kinds, "
     f"{len(RUST_UDP_KINDS)} UDP kinds, {len(required_paths)} required paths, "
-    f"{len(expected_coordination_parameters)} bounded coordination parameters"
+    f"{len(expected_coordination_parameters)} coordination parameters, "
+    f"{len(expected_explorer_parameters)} explorer parameters"
 )
