@@ -16,7 +16,7 @@ chrono = { version = "0.4", features = ["clock", "serde"] }
 clap = { version = "4.5", features = ["derive", "env"] }
 futures-util = { version = "0.3", features = ["sink"] }
 leptos = { version = "0.8.20", default-features = false, features = ["ssr"] }
-lru = "0.16"
+lru = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 subtle = "2.6"
