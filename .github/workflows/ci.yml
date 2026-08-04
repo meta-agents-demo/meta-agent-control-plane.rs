@@ -54,6 +54,7 @@ jobs:
         run: |
           node --check scripts/dashboard.js
           node --check scripts/metacognition-dashboard.js
+          node --check scripts/coordination-dashboard.js
 
       - name: Reject whitespace errors and conflict markers
         shell: bash
