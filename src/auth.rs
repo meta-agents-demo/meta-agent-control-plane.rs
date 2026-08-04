@@ -90,7 +90,11 @@ pub fn preferred_token<'a>(
     headers: &'a HeaderMap,
     query_token: Option<&'a str>,
 ) -> Option<&'a str> {
-    bearer_token(headers).or(query_token)
+    if headers.contains_key(AUTHORIZATION) {
+        bearer_token(headers)
+    } else {
+        query_token
+    }
 }
 
 #[cfg(test)]
@@ -125,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn authorization_header_precedes_query_token_and_malformed_header_falls_back() {
+    fn authorization_header_is_authoritative_over_query_credentials() {
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, "Bearer header-token".parse().unwrap());
         assert_eq!(
@@ -134,6 +138,9 @@ mod tests {
         );
 
         headers.insert(AUTHORIZATION, "Basic ignored".parse().unwrap());
+        assert_eq!(preferred_token(&headers, Some("query-token")), None);
+
+        headers.remove(AUTHORIZATION);
         assert_eq!(
             preferred_token(&headers, Some("query-token")),
             Some("query-token")
