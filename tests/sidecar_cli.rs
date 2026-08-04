@@ -7,6 +7,10 @@ use serde_json::Value;
 
 fn run_sidecar(provider: &str, input: &str) -> std::process::Output {
     let binary = env!("CARGO_BIN_EXE_meta-agent-sidecar");
+    let value: Value = serde_json::from_str(input).expect("test observation must be valid JSON");
+    let mut ndjson = serde_json::to_string(&value).expect("test observation serializes");
+    ndjson.push('\n');
+
     let mut child = Command::new(binary)
         .args(["--provider", provider, "--transport", "http", "--dry-run"])
         .stdin(Stdio::piped())
@@ -18,7 +22,7 @@ fn run_sidecar(provider: &str, input: &str) -> std::process::Output {
         .stdin
         .as_mut()
         .unwrap()
-        .write_all(input.as_bytes())
+        .write_all(ndjson.as_bytes())
         .unwrap();
     child.wait_with_output().unwrap()
 }
