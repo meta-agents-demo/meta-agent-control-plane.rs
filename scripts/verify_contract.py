@@ -37,7 +37,9 @@ if RUST_UDP_KINDS != OPENAPI_UDP_KINDS:
     )
 
 required_paths = {
+    "/api/v1/coordination",
     "/api/v1/events",
+    "/api/v1/metacognition",
     "/api/v1/snapshot",
     "/healthz",
     "/readyz",
