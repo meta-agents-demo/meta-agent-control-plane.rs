@@ -51,6 +51,31 @@ missing_paths = required_paths - set(OPENAPI["paths"])
 if missing_paths:
     errors.append(f"OpenAPI is missing paths: {sorted(missing_paths)!r}")
 
+expected_coordination_parameters = {
+    "max_assignments": (1, 256, 16),
+    "max_assignments_per_agent": (1, 32, 2),
+    "max_interventions": (1, 512, 32),
+    "max_holds": (1, 1024, 64),
+}
+coordination_parameters = OPENAPI["paths"]["/api/v1/coordination"]["get"].get(
+    "parameters", []
+)
+observed_coordination_parameters = {
+    parameter.get("name"): (
+        parameter.get("schema", {}).get("minimum"),
+        parameter.get("schema", {}).get("maximum"),
+        parameter.get("schema", {}).get("default"),
+    )
+    for parameter in coordination_parameters
+    if parameter.get("in") == "query"
+}
+if observed_coordination_parameters != expected_coordination_parameters:
+    errors.append(
+        "coordination policy parameter drift: "
+        f"expected={expected_coordination_parameters!r}, "
+        f"observed={observed_coordination_parameters!r}"
+    )
+
 if CARGO["package"]["name"] != "meta-agent-control-plane":
     errors.append("Cargo package name changed without updating contract tooling")
 
@@ -90,5 +115,6 @@ if errors:
 
 print(
     f"contract OK: {len(RUST_KINDS)} event kinds, "
-    f"{len(RUST_UDP_KINDS)} UDP kinds, {len(required_paths)} required paths"
+    f"{len(RUST_UDP_KINDS)} UDP kinds, {len(required_paths)} required paths, "
+    f"{len(expected_coordination_parameters)} bounded coordination parameters"
 )
