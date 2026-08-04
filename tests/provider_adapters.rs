@@ -1,8 +1,8 @@
 use meta_agent_control_plane::{
+    Config,
     model::{AgentEvent, Transport},
     provider::{AdapterError, normalize_anthropic, normalize_gemini, normalize_openai},
     store::{Store, TaskStatus},
-    Config,
 };
 use serde_json::{Value, json};
 
@@ -27,10 +27,10 @@ fn common_progress(provider_id_field: &str, provider_id: &str) -> Value {
         "blocker": null,
         "next_action": "Compare normalized event payloads."
     });
-    value
-        .as_object_mut()
-        .expect("object")
-        .insert(provider_id_field.to_owned(), Value::String(provider_id.to_owned()));
+    value.as_object_mut().expect("object").insert(
+        provider_id_field.to_owned(),
+        Value::String(provider_id.to_owned()),
+    );
     value
 }
 
@@ -105,7 +105,10 @@ fn hidden_reasoning_fields_are_rejected_at_any_depth() {
         ),
     ] {
         let error = normalize_openai(payload).expect_err(name);
-        assert!(matches!(error, AdapterError::ForbiddenReasoningField { .. }));
+        assert!(matches!(
+            error,
+            AdapterError::ForbiddenReasoningField { .. }
+        ));
     }
 }
 
