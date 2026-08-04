@@ -115,7 +115,7 @@ Open `/metacognition` for the Leptos operator view or read `/api/v1/metacognitio
 
 The coordination planner turns the same bounded snapshot and explainable diagnostics into a dependency-safe, fair-share plan. It emits assignments, operator interventions, and held tasks with stable IDs, priorities, rationales, recommended actions, diagnostic links, and retained source-event provenance.
 
-Read the current plan at `GET /api/v1/coordination` with the configured read token. The endpoint is read-only: it does not dispatch work, mutate task ownership, or call any provider. The same planner is available offline through `meta-agent-plan`; see [`docs/coordination-planner.md`](docs/coordination-planner.md) for policy limits and deterministic semantics.
+Open `/coordination` for the Leptos operator view or read `GET /api/v1/coordination` with the configured read token. Both surfaces are advisory and read-only: they do not dispatch work, mutate task ownership, or call any provider. The same planner is available offline through `meta-agent-plan`; see [`docs/coordination-planner.md`](docs/coordination-planner.md) for policy limits and deterministic semantics.
 
 ## Bounded in-memory state
 
@@ -149,6 +149,7 @@ Agent registration, goal/task definitions, task start/completion, and learned le
 | --- | --- |
 | `/` | Leptos SSR operator dashboard |
 | `/metacognition` | Explainable metacognition dashboard |
+| `/coordination` | Deterministic coordination-plan dashboard |
 | `/healthz` | Liveness and current revision |
 | `/readyz` | Readiness |
 | `/metrics` | Prometheus text exposition |
@@ -174,6 +175,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --all-targets --locked
 node --check scripts/dashboard.js
 node --check scripts/metacognition-dashboard.js
+node --check scripts/coordination-dashboard.js
 python3 scripts/verify_contract.py
 ```
 
@@ -208,7 +210,8 @@ src/metacognition/            deterministic explainable analysis engine
 src/metacognition_api.rs      protected analysis API
 src/metacognition_ui.rs       Leptos analysis dashboard
 src/coordination.rs           deterministic fair-share coordination planner
-src/coordination_api.rs       protected read-only coordination API
+src/coordination_api.rs       protected read-only coordination API and page route
+src/coordination_ui.rs        Leptos coordination-plan dashboard
 src/client.rs                 provider-neutral HTTP/WS/TCP/UDP Rust client
 src/bin/meta-agent-sidecar.rs provider observation sidecar
 src/provider.rs               OpenAI, Anthropic, and Gemini normalizers
