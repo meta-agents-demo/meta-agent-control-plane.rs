@@ -31,12 +31,7 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    use crate::{
-        auth::AuthPolicy,
-        config::Config,
-        daemon::BoundAddresses,
-        store::Store,
-    };
+    use crate::{auth::AuthPolicy, config::Config, daemon::BoundAddresses, store::Store};
 
     use super::*;
 
@@ -61,12 +56,7 @@ mod tests {
         for path in ["/", "/metacognition"] {
             let response = app
                 .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri(path)
-                        .body(Body::empty())
-                        .unwrap(),
-                )
+                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
                 .await
                 .unwrap();
             assert_eq!(response.status(), StatusCode::OK, "path {path}");
