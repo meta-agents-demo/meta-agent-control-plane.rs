@@ -1,0 +1,44 @@
+name: Workflow contract
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/**
+      - scripts/ci/test_workflow_contract.py
+      - Cargo.lock
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/**
+      - scripts/ci/test_workflow_contract.py
+      - Cargo.lock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate every GitHub Actions workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume "$PWD:/repo:ro" \
+            --workdir /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            .github/workflows/*.yml
+
+      - name: Run repository workflow contracts
+        run: python3 -m unittest -v scripts/ci/test_workflow_contract.py

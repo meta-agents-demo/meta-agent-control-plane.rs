@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.8.1
+        with:
+          shared-key: meta-agent-control-plane
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Run Clippy with warnings denied
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run all Rust tests
+        run: cargo test --workspace --all-targets --locked
+
+      - name: Run checked-in protocol contract
+        run: python3 scripts/verify_contract.py
+
+      - name: Validate dashboard JavaScript syntax
+        run: node --check scripts/dashboard.js
+
+      - name: Reject whitespace errors and conflict markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git grep -nE '^(<{7}|={7}|>{7})' -- . ':!Cargo.lock'; then
+            echo 'Git conflict markers are forbidden.' >&2
+            exit 1
+          fi
+
+  container:
+    name: OCI image
+    needs: rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the production image
+        run: docker build --tag meta-agent-control-plane:ci .
