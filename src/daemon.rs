@@ -8,9 +8,9 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     auth::AuthPolicy,
     config::{Config, ConfigError},
-    http::{self, AppState},
+    http::AppState,
     store::Store,
-    tcp, udp,
+    tcp, udp, web,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -115,7 +115,7 @@ impl Daemon {
             addresses: _,
         } = self;
 
-        let http = http::serve(http_listener, state.clone(), cancellation.child_token());
+        let http = web::serve(http_listener, state.clone(), cancellation.child_token());
         let tcp = tcp::serve(
             tcp_listener,
             state.store.clone(),
