@@ -2,7 +2,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::get,
 };
 use serde_json::json;
@@ -10,6 +10,7 @@ use serde_json::json;
 use crate::{
     auth::bearer_token,
     coordination::{CoordinationPlan, build_plan},
+    coordination_ui,
     http::AppState,
 };
 
@@ -44,8 +45,15 @@ impl IntoResponse for ApiError {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/coordination", get(page))
         .route("/api/v1/coordination", get(plan))
         .with_state(state)
+}
+
+async fn page(State(state): State<AppState>) -> Html<String> {
+    Html(coordination_ui::dashboard(
+        state.auth.reads_are_protected(),
+    ))
 }
 
 async fn plan(
@@ -89,6 +97,26 @@ mod tests {
             config,
             addresses,
         }
+    }
+
+    #[tokio::test]
+    async fn page_is_served_without_exposing_protected_plan_data() {
+        let response = router(test_state())
+            .oneshot(
+                Request::builder()
+                    .uri("/coordination")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("Coordination plan"));
+        assert!(body.contains("Read token"));
+        assert!(body.contains("advisory and read-only"));
     }
 
     #[tokio::test]
