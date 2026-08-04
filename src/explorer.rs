@@ -4,9 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::store::{
-    AgentState, CacheSnapshot, Counters, EventRecord, LessonState, Snapshot,
-};
+use crate::store::{AgentState, CacheSnapshot, Counters, EventRecord, LessonState, Snapshot};
 
 pub const MAX_TIMELINE_LIMIT: usize = 250;
 pub const MAX_SESSION_LIMIT: usize = 250;
@@ -96,10 +94,7 @@ pub struct RetentionSummary {
 #[derive(Debug, Error)]
 pub enum ExplorerError {
     #[error("{name} must be between 1 and {maximum}")]
-    InvalidLimit {
-        name: &'static str,
-        maximum: usize,
-    },
+    InvalidLimit { name: &'static str, maximum: usize },
 }
 
 #[derive(Debug)]
@@ -159,8 +154,7 @@ impl SessionAccumulator {
 
         let event_id = event.event_id.to_string();
         if event.occurred_at > self.last_occurred_at
-            || (event.occurred_at == self.last_occurred_at
-                && event_id > self.latest_event_id)
+            || (event.occurred_at == self.last_occurred_at && event_id > self.latest_event_id)
         {
             self.last_occurred_at = event.occurred_at;
             self.latest_event_id = event_id;
@@ -285,11 +279,7 @@ pub fn build_explorer(
     })
 }
 
-fn validate_limit(
-    name: &'static str,
-    value: usize,
-    maximum: usize,
-) -> Result<(), ExplorerError> {
+fn validate_limit(name: &'static str, value: usize, maximum: usize) -> Result<(), ExplorerError> {
     if value == 0 || value > maximum {
         return Err(ExplorerError::InvalidLimit { name, maximum });
     }
@@ -416,7 +406,10 @@ mod tests {
             vec!["task-1".to_owned(), "task-2".to_owned()]
         );
         assert_eq!(explorer.sessions[0].event_count, 2);
-        assert_eq!(explorer.sessions[0].latest_task_id.as_deref(), Some("task-1"));
+        assert_eq!(
+            explorer.sessions[0].latest_task_id.as_deref(),
+            Some("task-1")
+        );
         assert_eq!(explorer.sessions[0].transports["http"], 1);
         assert_eq!(explorer.sessions[0].transports["tcp"], 1);
         assert_eq!(
