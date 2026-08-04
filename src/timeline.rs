@@ -77,8 +77,10 @@ impl TimelineCursor {
         if revision.len() != 16 || seconds.len() != 16 || nanos.len() != 8 || event_id.len() != 32 {
             return Err(TimelineError::InvalidCursor);
         }
-        let revision = u64::from_str_radix(revision, 16).map_err(|_| TimelineError::InvalidCursor)?;
-        let seconds_bits = u64::from_str_radix(seconds, 16).map_err(|_| TimelineError::InvalidCursor)?;
+        let revision =
+            u64::from_str_radix(revision, 16).map_err(|_| TimelineError::InvalidCursor)?;
+        let seconds_bits =
+            u64::from_str_radix(seconds, 16).map_err(|_| TimelineError::InvalidCursor)?;
         let seconds = seconds_bits as i64;
         let nanos = u32::from_str_radix(nanos, 16).map_err(|_| TimelineError::InvalidCursor)?;
         if nanos >= 1_000_000_000 {
@@ -243,9 +245,7 @@ mod tests {
     fn cursor_round_trip_preserves_nanoseconds_and_uuid() {
         let cursor = TimelineCursor {
             revision: 42,
-            occurred_at: Utc
-                .with_ymd_and_hms(2026, 7, 30, 20, 0, 0)
-                .unwrap()
+            occurred_at: Utc.with_ymd_and_hms(2026, 7, 30, 20, 0, 0).unwrap()
                 + Duration::nanoseconds(987_654_321),
             event_id: Uuid::parse_str("018f5c8a-d5a7-7f7c-8d61-84f55a35fe91").unwrap(),
         };
@@ -327,13 +327,13 @@ mod tests {
             occurred_at: snapshot.generated_at,
             event_id: Uuid::nil(),
         };
-        assert_eq!(
+        assert!(matches!(
             build_timeline_page(&snapshot, TimelinePolicy::default(), Some(cursor)),
             Err(TimelineError::RevisionChanged {
                 requested: 10,
                 current: 11,
             })
-        );
+        ));
     }
 
     #[test]
