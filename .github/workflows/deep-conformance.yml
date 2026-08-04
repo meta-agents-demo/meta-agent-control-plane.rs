@@ -1,0 +1,71 @@
+name: Deep replay and pressure conformance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/deep-conformance.yml
+      - tests/replay_pressure_udp.rs
+      - docs/testing.md
+      - Makefile
+      - README.md
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deep-conformance.yml
+      - tests/replay_pressure_udp.rs
+      - docs/testing.md
+      - Makefile
+      - README.md
+  schedule:
+    - cron: '17 7 * * 1,4'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deep-conformance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: '1'
+
+jobs:
+  replay-pressure-udp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.8.1
+        with:
+          shared-key: meta-agent-deep-conformance
+
+      - name: Run deterministic replay, transport, pressure, and UDP policy tests repeatedly
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            echo "deep conformance attempt ${attempt}/3"
+            cargo test --locked --test replay_pressure_udp -- --nocapture --test-threads=1
+          done
+
+      - name: Re-run formatting and Clippy around the deep test target
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          git diff --check

@@ -8,6 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CI = ROOT / ".github/workflows/ci.yml"
 WORKFLOW_CONTRACT = ROOT / ".github/workflows/workflow-contract.yml"
+DEEP_CONFORMANCE = ROOT / ".github/workflows/deep-conformance.yml"
 DOCKERFILE = ROOT / "Dockerfile"
 LOCKFILE = ROOT / "Cargo.lock"
 PINNED_ACTION = re.compile(r"uses:\s+[^@\s]+@[0-9a-f]{40}(?:\s+#.*)?$")
@@ -19,12 +20,14 @@ class WorkflowContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.ci = CI.read_text(encoding="utf-8")
         cls.contract = WORKFLOW_CONTRACT.read_text(encoding="utf-8")
+        cls.deep = DEEP_CONFORMANCE.read_text(encoding="utf-8")
         cls.dockerfile = DOCKERFILE.read_text(encoding="utf-8")
 
     def test_cargo_lock_is_committed_and_generation_is_not_hidden_in_ci(self) -> None:
         self.assertTrue(LOCKFILE.is_file())
         self.assertGreater(LOCKFILE.stat().st_size, 100)
         self.assertNotIn("cargo generate-lockfile", self.ci)
+        self.assertNotIn("cargo generate-lockfile", self.deep)
         self.assertIn("cargo clippy --workspace --all-targets --locked", self.ci)
         self.assertIn("cargo test --workspace --all-targets --locked", self.ci)
         self.assertIn(
@@ -33,19 +36,19 @@ class WorkflowContractTests(unittest.TestCase):
         )
 
     def test_all_repository_actions_are_immutable(self) -> None:
-        for workflow in (CI, WORKFLOW_CONTRACT):
+        for workflow in (CI, WORKFLOW_CONTRACT, DEEP_CONFORMANCE):
             for line in workflow.read_text(encoding="utf-8").splitlines():
                 if "uses:" in line:
                     with self.subTest(workflow=workflow.name, line=line):
                         self.assertRegex(line.strip(), PINNED_ACTION)
 
     def test_checkout_never_persists_credentials(self) -> None:
-        for workflow in (self.ci, self.contract):
+        for workflow in (self.ci, self.contract, self.deep):
             self.assertIn("persist-credentials: false", workflow)
             self.assertNotIn("persist-credentials: true", workflow)
 
     def test_workflows_are_read_only_and_bounded(self) -> None:
-        for workflow in (self.ci, self.contract):
+        for workflow in (self.ci, self.contract, self.deep):
             self.assertIn("permissions:\n  contents: read", workflow)
             self.assertIn("timeout-minutes:", workflow)
             self.assertIn("cancel-in-progress: true", workflow)
@@ -77,6 +80,22 @@ class WorkflowContractTests(unittest.TestCase):
         ):
             with self.subTest(contract=contract):
                 self.assertIn(contract, self.ci)
+
+    def test_deep_conformance_is_scheduled_repeatable_and_locked(self) -> None:
+        for contract in (
+            "schedule:",
+            "cron: '17 7 * * 1,4'",
+            "workflow_dispatch:",
+            "for attempt in 1 2 3; do",
+            "cargo test --locked --test replay_pressure_udp -- --nocapture --test-threads=1",
+            "cargo fmt --all --check",
+            "cargo clippy --workspace --all-targets --locked -- -D warnings",
+            "RUST_BACKTRACE: '1'",
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, self.deep)
+        self.assertNotIn("secrets.", self.deep)
+        self.assertNotIn("id-token: write", self.deep)
 
     def test_workflow_contract_uses_actionlint_and_tests_itself(self) -> None:
         self.assertIn("docker run --rm", self.contract)
