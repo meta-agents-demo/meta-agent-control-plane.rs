@@ -47,11 +47,11 @@ jobs:
       - name: Run all Rust tests
         run: cargo test --workspace --all-targets --locked
 
-      - name: Run protocol fixture contracts
-        run: bash tests/contract-fixtures.sh
+      - name: Run checked-in protocol contract
+        run: python3 scripts/verify_contract.py
 
       - name: Validate dashboard JavaScript syntax
-        run: node --check dashboard/app.js
+        run: node --check scripts/dashboard.js
 
       - name: Reject whitespace errors and conflict markers
         shell: bash
