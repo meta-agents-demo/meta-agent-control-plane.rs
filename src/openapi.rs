@@ -61,6 +61,32 @@ pub fn document(
                     "summary": "Build the current deterministic coordination plan",
                     "description": "Returns bounded dependency-safe assignments, operator interventions, and held tasks derived from the same visible retained snapshot and metacognition rules. The endpoint is read-only and never dispatches or mutates agent work.",
                     "security": read_security.clone(),
+                    "parameters": [
+                        {
+                            "name": "max_assignments",
+                            "in": "query",
+                            "required": false,
+                            "schema": { "type": "integer", "minimum": 1, "maximum": 256, "default": 16 }
+                        },
+                        {
+                            "name": "max_assignments_per_agent",
+                            "in": "query",
+                            "required": false,
+                            "schema": { "type": "integer", "minimum": 1, "maximum": 32, "default": 2 }
+                        },
+                        {
+                            "name": "max_interventions",
+                            "in": "query",
+                            "required": false,
+                            "schema": { "type": "integer", "minimum": 1, "maximum": 512, "default": 32 }
+                        },
+                        {
+                            "name": "max_holds",
+                            "in": "query",
+                            "required": false,
+                            "schema": { "type": "integer", "minimum": 1, "maximum": 1024, "default": 64 }
+                        }
+                    ],
                     "responses": {
                         "200": {
                             "description": "Current coordination plan",
@@ -70,6 +96,7 @@ pub fn document(
                                 }
                             }
                         },
+                        "400": { "description": "Planning query was malformed, unknown, duplicated, zero, or above its server cap" },
                         "401": { "description": "Read API authentication failed" },
                         "500": { "description": "The configured planning policy could not produce a plan" }
                     }
@@ -267,6 +294,16 @@ mod tests {
             "#/components/schemas/CoordinationPlan"
         );
         assert_eq!(
+            document["paths"]["/api/v1/coordination"]["get"]["parameters"]
+                .as_array()
+                .map(Vec::len),
+            Some(4)
+        );
+        assert_eq!(
+            document["paths"]["/api/v1/coordination"]["get"]["parameters"][0]["schema"]["maximum"],
+            256
+        );
+        assert_eq!(
             document["paths"]["/api/v1/metacognition"]["get"]["responses"]["200"]["content"]["application/json"]
                 ["schema"]["$ref"],
             "#/components/schemas/MetacognitionSnapshot"
@@ -303,6 +340,10 @@ mod tests {
             runtime["paths"]
                 .as_object()
                 .map(|paths| paths.keys().collect::<Vec<_>>())
+        );
+        assert_eq!(
+            checked_in["paths"]["/api/v1/coordination"]["get"]["parameters"],
+            runtime["paths"]["/api/v1/coordination"]["get"]["parameters"]
         );
     }
 }
