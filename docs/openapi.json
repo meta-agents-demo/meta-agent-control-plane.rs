@@ -46,6 +46,35 @@
         }
       }
     },
+    "/api/v1/coordination": {
+      "get": {
+        "summary": "Build the current deterministic coordination plan",
+        "description": "Returns bounded dependency-safe assignments, operator interventions, and held tasks derived from visible retained state. The endpoint is read-only and never dispatches or mutates agent work.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current coordination plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoordinationPlan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Read API authentication failed"
+          },
+          "500": {
+            "description": "The configured planning policy could not produce a plan"
+          }
+        }
+      }
+    },
     "/api/v1/snapshot": {
       "get": {
         "summary": "Read the current bounded in-memory projection",
@@ -233,6 +262,10 @@
             "$ref": "#/components/schemas/EventEnvelope"
           }
         }
+      },
+      "CoordinationPlan": {
+        "type": "object",
+        "description": "Deterministic read-only plan containing bounded assignments, interventions, held tasks, planning policies, and source-event provenance."
       }
     }
   },
