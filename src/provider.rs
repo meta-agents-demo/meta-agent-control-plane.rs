@@ -111,7 +111,6 @@ const fn default_attempt() -> u32 {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct OpenAiObservation {
     pub response_id: String,
     pub context: AdapterContext,
@@ -120,7 +119,6 @@ pub struct OpenAiObservation {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct AnthropicObservation {
     pub message_id: String,
     pub context: AdapterContext,
@@ -129,7 +127,6 @@ pub struct AnthropicObservation {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct GeminiObservation {
     pub response_id: String,
     pub context: AdapterContext,
