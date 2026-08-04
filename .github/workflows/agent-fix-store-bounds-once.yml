@@ -18,8 +18,7 @@ jobs:
   repair:
     if: >-
       github.repository == 'meta-agents-demo/meta-agent-control-plane.rs' &&
-      github.ref == 'refs/heads/agent/den-1057-meta-agent-control-plane' &&
-      github.actor == 'ORESoftware'
+      github.ref == 'refs/heads/agent/den-1057-meta-agent-control-plane'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
