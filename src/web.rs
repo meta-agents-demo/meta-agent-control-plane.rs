@@ -57,7 +57,7 @@ mod tests {
     #[tokio::test]
     async fn combined_router_serves_operator_pages_and_protects_read_apis() {
         let app = router(test_state());
-        for path in ["/", "/metacognition", "/coordination"] {
+        for path in ["/", "/metacognition", "/coordination", "/explorer"] {
             let response = app
                 .clone()
                 .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())

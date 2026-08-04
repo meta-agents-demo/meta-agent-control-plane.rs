@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
     extract::{RawQuery, State},
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::get,
 };
 use serde_json::json;
@@ -15,6 +15,7 @@ use crate::{
         ExplorerPolicy, ExplorerSnapshot, MAX_LESSON_LIMIT, MAX_SESSION_LIMIT, MAX_TIMELINE_LIMIT,
         build_explorer,
     },
+    explorer_ui,
     http::AppState,
 };
 
@@ -126,8 +127,13 @@ fn bounded(name: &str, value: usize, maximum: usize) -> Result<usize, ApiError> 
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/explorer", get(page))
         .route("/api/v1/explorer", get(explorer))
         .with_state(state)
+}
+
+async fn page(State(state): State<AppState>) -> Html<String> {
+    Html(explorer_ui::dashboard(state.auth.reads_are_protected()))
 }
 
 async fn explorer(
@@ -181,6 +187,27 @@ mod tests {
             .header(header::AUTHORIZATION, "Bearer test-token-at-least-16-bytes")
             .body(Body::empty())
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn page_is_static_and_contains_no_protected_projection() {
+        let response = router(test_state())
+            .oneshot(
+                Request::builder()
+                    .uri("/explorer")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("Operator explorer"));
+        assert!(body.contains("Read token"));
+        assert!(body.contains("retention-aware"));
+        assert!(!body.contains("test-token-at-least-16-bytes"));
     }
 
     #[tokio::test]

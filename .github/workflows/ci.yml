@@ -51,12 +51,14 @@ jobs:
         run: |
           python3 scripts/verify_contract.py
           python3 scripts/test_coordination_dashboard.py
+          python3 scripts/test_explorer_dashboard.py
 
       - name: Validate dashboard JavaScript syntax
         run: |
           node --check scripts/dashboard.js
           node --check scripts/metacognition-dashboard.js
           node --check scripts/coordination-dashboard.js
+          node --check scripts/explorer-dashboard.js
 
       - name: Reject whitespace errors and conflict markers
         shell: bash
