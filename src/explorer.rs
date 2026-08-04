@@ -201,6 +201,7 @@ pub fn build_explorer(
             .learned_at
             .cmp(&left.learned_at)
             .then_with(|| left.agent_id.cmp(&right.agent_id))
+            .then_with(|| left.lesson.lesson_id.cmp(&right.lesson.lesson_id))
     });
     let total_lessons = lessons.len();
     lessons.truncate(policy.lesson_limit);
@@ -242,7 +243,7 @@ pub fn build_explorer(
     timeline.truncate(policy.timeline_limit);
     sessions.truncate(policy.session_limit);
 
-    let generated_at = Utc::now();
+    let generated_at = snapshot.generated_at;
     let uptime_seconds = generated_at
         .signed_duration_since(snapshot.started_at)
         .num_seconds()
@@ -406,8 +407,14 @@ mod tests {
 
         assert_eq!(explorer.sessions.len(), 2);
         assert_eq!(explorer.sessions[0].session_id, "session-a");
-        assert_eq!(explorer.sessions[0].agent_ids, ["agent-a", "agent-b"]);
-        assert_eq!(explorer.sessions[0].task_ids, ["task-1", "task-2"]);
+        assert_eq!(
+            explorer.sessions[0].agent_ids,
+            vec!["agent-a".to_owned(), "agent-b".to_owned()]
+        );
+        assert_eq!(
+            explorer.sessions[0].task_ids,
+            vec!["task-1".to_owned(), "task-2".to_owned()]
+        );
         assert_eq!(explorer.sessions[0].event_count, 2);
         assert_eq!(explorer.sessions[0].latest_task_id.as_deref(), Some("task-1"));
         assert_eq!(explorer.sessions[0].transports["http"], 1);
@@ -418,6 +425,13 @@ mod tests {
         );
         assert_eq!(explorer.retention.total_sessions, 2);
         assert_eq!(explorer.system.retained_events, 4);
+        assert_eq!(explorer.generated_at, snapshot.generated_at);
+
+        let replay = build_explorer(&snapshot, ExplorerPolicy::default()).unwrap();
+        assert_eq!(
+            serde_json::to_value(explorer).unwrap(),
+            serde_json::to_value(replay).unwrap()
+        );
     }
 
     #[test]
