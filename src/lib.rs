@@ -19,6 +19,8 @@ pub mod openapi;
 pub mod provider;
 pub mod store;
 pub mod tcp;
+pub mod timeline;
+pub mod timeline_api;
 pub mod udp;
 pub mod ui;
 pub mod web;
