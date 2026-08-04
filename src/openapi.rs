@@ -75,6 +75,24 @@ pub fn document(
                     }
                 }
             },
+            "/api/v1/metacognition": {
+                "get": {
+                    "summary": "Read the current explainable metacognition projection",
+                    "description": "Returns deterministic diagnostics, evidence-backed progress, critical paths, stalls, retry loops, and recommended actions derived only from visible retained state.",
+                    "security": read_security.clone(),
+                    "responses": {
+                        "200": {
+                            "description": "Current metacognition projection",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/MetacognitionSnapshot" }
+                                }
+                            }
+                        },
+                        "401": { "description": "Read API authentication failed" }
+                    }
+                }
+            },
             "/api/v1/snapshot": {
                 "get": {
                     "summary": "Read the current bounded in-memory projection",
@@ -188,6 +206,10 @@ pub fn document(
                     "type": "object",
                     "description": "Bounded LRU projection containing agents, goals, tasks, lessons, recent events, an independent idempotency window, counters, and cache pressure."
                 },
+                "MetacognitionSnapshot": {
+                    "type": "object",
+                    "description": "Deterministic read-only projection of visible progress, evidence, dependency, retry, stall, and consistency diagnostics."
+                },
                 "CoordinationPlan": {
                     "type": "object",
                     "description": "Deterministic read-only plan containing bounded assignments, interventions, held tasks, planning policies, and source-event provenance."
@@ -243,6 +265,11 @@ mod tests {
             document["paths"]["/api/v1/coordination"]["get"]["responses"]["200"]["content"]["application/json"]
                 ["schema"]["$ref"],
             "#/components/schemas/CoordinationPlan"
+        );
+        assert_eq!(
+            document["paths"]["/api/v1/metacognition"]["get"]["responses"]["200"]["content"]["application/json"]
+                ["schema"]["$ref"],
+            "#/components/schemas/MetacognitionSnapshot"
         );
     }
 
