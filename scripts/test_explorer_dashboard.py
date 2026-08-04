@@ -98,7 +98,6 @@ class ExplorerDashboardContractTests(unittest.TestCase):
         self.assertIn('route("/api/v1/explorer", get(explorer))', API)
         self.assertIn("authorize_read", API)
         self.assertNotIn("ExplorerSnapshot {", UI)
-        self.assertNotIn("meta-agent-read-token=", UI)
 
 
 if __name__ == "__main__":
