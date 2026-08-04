@@ -92,25 +92,14 @@ impl PlanningQuery {
             })?;
             match name {
                 "max_assignments" => {
-                    query.max_assignments = Some(bounded(
-                        name,
-                        value,
-                        MAX_ASSIGNMENTS_LIMIT,
-                    )?);
+                    query.max_assignments = Some(bounded(name, value, MAX_ASSIGNMENTS_LIMIT)?);
                 }
                 "max_assignments_per_agent" => {
-                    query.max_assignments_per_agent = Some(bounded(
-                        name,
-                        value,
-                        MAX_ASSIGNMENTS_PER_AGENT_LIMIT,
-                    )?);
+                    query.max_assignments_per_agent =
+                        Some(bounded(name, value, MAX_ASSIGNMENTS_PER_AGENT_LIMIT)?);
                 }
                 "max_interventions" => {
-                    query.max_interventions = Some(bounded(
-                        name,
-                        value,
-                        MAX_INTERVENTIONS_LIMIT,
-                    )?);
+                    query.max_interventions = Some(bounded(name, value, MAX_INTERVENTIONS_LIMIT)?);
                 }
                 "max_holds" => {
                     query.max_holds = Some(bounded(name, value, MAX_HOLDS_LIMIT)?);
@@ -132,9 +121,7 @@ impl PlanningQuery {
             max_assignments_per_agent: self
                 .max_assignments_per_agent
                 .unwrap_or(defaults.max_assignments_per_agent),
-            max_interventions: self
-                .max_interventions
-                .unwrap_or(defaults.max_interventions),
+            max_interventions: self.max_interventions.unwrap_or(defaults.max_interventions),
             max_holds: self.max_holds.unwrap_or(defaults.max_holds),
         }
     }
