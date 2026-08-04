@@ -10,6 +10,7 @@ CI = ROOT / ".github/workflows/ci.yml"
 WORKFLOW_CONTRACT = ROOT / ".github/workflows/workflow-contract.yml"
 LOCKFILE = ROOT / "Cargo.lock"
 PINNED_ACTION = re.compile(r"uses:\s+[^@\s]+@[0-9a-f]{40}(?:\s+#.*)?$")
+PINNED_ACTIONLINT_IMAGE = re.compile(r"rhysd/actionlint@sha256:[0-9a-f]{64}")
 
 
 class WorkflowContractTests(unittest.TestCase):
@@ -56,8 +57,11 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertIn(command, self.ci)
 
     def test_workflow_contract_uses_actionlint_and_tests_itself(self) -> None:
-        self.assertIn("docker://rhysd/actionlint@sha256:", self.contract)
+        self.assertIn("docker run --rm", self.contract)
+        self.assertRegex(self.contract, PINNED_ACTIONLINT_IMAGE)
+        self.assertIn('--volume "$PWD:/repo:ro"', self.contract)
         self.assertIn(".github/workflows/*.yml", self.contract)
+        self.assertNotIn("args: .github/workflows/*.yml", self.contract)
         self.assertIn(
             "python3 -m unittest -v scripts/ci/test_workflow_contract.py",
             self.contract,
