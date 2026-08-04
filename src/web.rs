@@ -3,12 +3,15 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    coordination_api,
     http::{self, AppState},
     metacognition_api,
 };
 
 pub fn router(state: AppState) -> Router {
-    http::router(state.clone()).merge(metacognition_api::router(state))
+    http::router(state.clone())
+        .merge(metacognition_api::router(state.clone()))
+        .merge(coordination_api::router(state))
 }
 
 pub async fn serve(
@@ -51,9 +54,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn combined_router_serves_overview_and_metacognition_pages() {
+    async fn combined_router_serves_all_operator_pages() {
         let app = router(test_state());
-        for path in ["/", "/metacognition"] {
+        for path in ["/", "/metacognition", "/coordination"] {
             let response = app
                 .clone()
                 .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
