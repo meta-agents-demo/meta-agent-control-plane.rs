@@ -1,0 +1,19 @@
+{
+  "response_id": "resp-gemini-demo-1",
+  "context": {
+    "agent_id": "gemini-demo-agent",
+    "model": "gemini-pro",
+    "instance_id": "mock-gemini-1",
+    "session_id": "parallel-demo-session",
+    "correlation_id": "parallel-demo-goal",
+    "sequence": 3
+  },
+  "observation": "completion",
+  "task_id": "summarize-verification",
+  "outcome": "succeeded",
+  "summary": "Produced an observable verification summary with retained artifacts.",
+  "artifacts": [
+    "mock-report://parallel-demo/summary"
+  ],
+  "actual_result": "All provider payloads normalized without hidden reasoning fields."
+}
