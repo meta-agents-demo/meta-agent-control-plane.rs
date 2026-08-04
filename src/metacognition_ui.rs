@@ -56,7 +56,9 @@ pub fn dashboard(reads_protected: bool) -> String {
         </main>
     }.to_html();
 
-    format!("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"dark\"><title>Explainable Metacognition</title><style>{CSS}</style></head><body>{body}<script>{SCRIPT}</script></body></html>")
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"dark\"><title>Explainable Metacognition</title><style>{CSS}</style></head><body>{body}<script>{SCRIPT}</script></body></html>"
+    )
 }
 
 const SCRIPT: &str = include_str!("../scripts/metacognition-dashboard.js");
