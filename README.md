@@ -131,20 +131,24 @@ Important controls include listener addresses, auth/read protection, payload/dat
 ## Validation
 
 ```bash
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets --all-features
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --all-targets --locked
 node --check scripts/dashboard.js
-python scripts/verify_contract.py
+python3 scripts/verify_contract.py
 ```
 
-The inline dashboard script is mirrored in `scripts/dashboard.js` so its JavaScript syntax can be checked independently. CI also builds the OCI image.
+The inline dashboard script is mirrored in `scripts/dashboard.js` so its JavaScript syntax can be checked independently. CI also builds the OCI image from `Cargo.lock`, verifies its non-root entrypoint, boots it with a read-only root and dropped capabilities, and probes liveness and readiness.
 
 ## Deployment
 
 ```bash
 docker build -t meta-agent-control-plane:local .
 docker run --rm \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
   -p 8787:8787 -p 8788:8788 -p 8789:8789/udp \
   -e META_AGENT_AUTH_TOKEN='replace-with-at-least-16-bytes' \
   -e META_AGENT_PROTECT_READ_API=true \
@@ -174,4 +178,4 @@ fixtures/         valid and invalid protocol fixtures
 
 ## Project tracking
 
-The canonical Linear implementation issue is `DEN-1057`. GitHub publication is blocked until the GitHub app is installed for the `meta-agents-demo` organization and the canonical repository `meta-agent-control-plane.rs` is created or exposed.
+The canonical implementation issue is `DEN-1057`. Repository publication and the recovered implementation were completed through reviewed GitHub history; bootstrap lifecycle and publication-infrastructure evidence is tracked in `DEN-1058` and `DEN-319`. Protocol, transport, observability, and promotion follow-up remains tracked in `DEN-1061`, `DEN-1067`, and `DEN-1069`.
