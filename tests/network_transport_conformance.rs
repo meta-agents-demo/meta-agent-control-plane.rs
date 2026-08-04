@@ -177,7 +177,6 @@ async fn send_http(
         .await
         .expect("write HTTP headers");
     stream.write_all(&body).await.expect("write HTTP body");
-    stream.shutdown().await.expect("finish HTTP request");
 
     let mut response = Vec::new();
     timeout(IO_TIMEOUT, stream.read_to_end(&mut response))
