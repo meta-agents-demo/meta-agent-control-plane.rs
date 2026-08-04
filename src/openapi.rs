@@ -240,8 +240,8 @@ mod tests {
         assert_eq!(document["servers"][0]["url"], "/");
         assert!(document["paths"]["/metrics"]["get"]["security"].is_array());
         assert_eq!(
-            document["paths"]["/api/v1/coordination"]["get"]["responses"]["200"]["content"]
-                ["application/json"]["schema"]["$ref"],
+            document["paths"]["/api/v1/coordination"]["get"]["responses"]["200"]["content"]["application/json"]
+                ["schema"]["$ref"],
             "#/components/schemas/CoordinationPlan"
         );
     }
