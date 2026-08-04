@@ -1,8 +1,9 @@
 name: DEN-1057 apply formatting and lockfile once
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches:
+      - agent/den-1057-meta-agent-control-plane
     paths:
       - .github/workflows/agent-format-harden-once.yml
 
@@ -16,9 +17,8 @@ concurrency:
 jobs:
   apply:
     if: >-
-      github.event.pull_request.number == 1 &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'agent/den-1057-meta-agent-control-plane' &&
+      github.repository == 'meta-agents-demo/meta-agent-control-plane.rs' &&
+      github.ref == 'refs/heads/agent/den-1057-meta-agent-control-plane' &&
       github.actor == 'ORESoftware'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -64,6 +64,7 @@ on:
       - Cargo.lock
       - src/**
       - tests/**
+      - examples/**
   push:
     branches: [main]
     paths:
@@ -72,13 +73,14 @@ on:
       - Cargo.lock
       - src/**
       - tests/**
+      - examples/**
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: format-lock-drift-candidate
+  group: format-lock-drift-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -106,7 +108,7 @@ jobs:
           cargo generate-lockfile
           cmp "${RUNNER_TEMP}/Cargo.lock.before" Cargo.lock
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
-          git diff --exit-code -- Cargo.lock src tests
+          git diff --exit-code -- Cargo.lock src tests examples
 ''', encoding='utf-8')
           PY
           git diff --check
@@ -117,6 +119,7 @@ jobs:
           set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add Cargo.lock src tests .github/workflows/agent-format-harden-once.yml
+          git add -u
+          git add Cargo.lock
           git commit -m 'fix(DEN-1057): format sources and commit the lockfile'
           git push origin HEAD:agent/den-1057-meta-agent-control-plane
