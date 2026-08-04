@@ -13,11 +13,7 @@ use meta_agent_control_plane::{
     udp,
 };
 use serde_json::{Value, json};
-use tokio::{
-    net::UdpSocket,
-    sync::broadcast::error::RecvError,
-    time::timeout,
-};
+use tokio::{net::UdpSocket, sync::broadcast::error::RecvError, time::timeout};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -215,7 +211,10 @@ async fn deterministic_replay_reproduces_projection_and_duplicate_replay_is_iner
 
     let first_snapshot = first_store.snapshot().await;
     let second_snapshot = second_store.snapshot().await;
-    assert_eq!(full_projection(&first_snapshot), full_projection(&second_snapshot));
+    assert_eq!(
+        full_projection(&first_snapshot),
+        full_projection(&second_snapshot)
+    );
 
     let stable_projection = derived_projection(&first_snapshot);
     let stable_revision = first_snapshot.revision;
