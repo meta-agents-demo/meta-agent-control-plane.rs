@@ -821,7 +821,7 @@ mod tests {
     async fn retry_loop_precedes_stall_and_is_deterministic() {
         let store = store();
         create_task(&store, "agent-a", "retry-task", Vec::new()).await;
-        let mut started = EventEnvelope::new(
+        let started = EventEnvelope::new(
             agent("agent-a"),
             AgentEvent::TaskStarted(TaskStarted {
                 task_id: "retry-task".to_owned(),
