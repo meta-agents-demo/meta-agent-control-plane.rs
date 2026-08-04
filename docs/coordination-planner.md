@@ -26,6 +26,10 @@ Every assignment and intervention includes a deterministic ID, priority, public 
 
 Assignments are recommendations, not queue claims or distributed leases. A runtime that executes them must still apply its own authorization, concurrency, freshness, and idempotency controls. Rebuild the plan after accepted state changes rather than treating an old plan as an imperative command stream.
 
+## Plan freshness
+
+A plan is bound to the snapshot `revision` and `generated_at` values included in its JSON. Consumers must compare that revision with the current store before presenting an assignment as actionable. Any accepted event, operator correction, lease decision, or provider-status change invalidates the old plan for execution purposes and requires a rebuild. Stable assignment IDs support comparison and UI diffing; they are not authorization tokens or durable queue claims.
+
 ## Assignment precedence
 
 For an otherwise eligible task, the highest-priority visible condition wins:
