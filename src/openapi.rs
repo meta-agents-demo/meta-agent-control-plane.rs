@@ -300,8 +300,7 @@ mod tests {
             Some(4)
         );
         assert_eq!(
-            document["paths"]["/api/v1/coordination"]["get"]["parameters"][0]["schema"]
-                ["maximum"],
+            document["paths"]["/api/v1/coordination"]["get"]["parameters"][0]["schema"]["maximum"],
             256
         );
         assert_eq!(
