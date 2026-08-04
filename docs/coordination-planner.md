@@ -51,6 +51,8 @@ The planner never dispatches a task with unresolved or missing dependencies. Dep
 
 Candidates are ranked deterministically within each agent, then selected in fair-share rounds across agents. A single agent cannot consume every slot merely because it owns many similarly ranked tasks. Candidates excluded by the configured limits are retained as `assignment_limit` holds up to the hold bound.
 
+The summary distinguishes candidates suppressed by assignment capacity from intervention or hold records omitted by their independent retention bounds. This makes a truncated plan observable without converting omitted work into implied authorization. Increase the appropriate bound and rebuild from the same snapshot when an operator needs the additional explanations.
+
 ## Offline CLI
 
 Export a protected snapshot and build a plan without connecting the CLI to the daemon:
