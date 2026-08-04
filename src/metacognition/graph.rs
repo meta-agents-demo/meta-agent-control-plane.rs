@@ -43,7 +43,7 @@ fn mean(values: impl Iterator<Item = f32>) -> f32 {
 }
 
 fn index_task_events(events: &[EventRecord]) -> TaskEventIndex<'_> {
-    let mut indexed = BTreeMap::new();
+    let mut indexed: TaskEventIndex<'_> = BTreeMap::new();
     for record in events {
         if let Some(task_id) = record.event.task_id() {
             indexed
