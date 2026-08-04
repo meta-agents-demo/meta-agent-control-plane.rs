@@ -39,6 +39,8 @@ if RUST_UDP_KINDS != OPENAPI_UDP_KINDS:
 required_paths = {
     "/api/v1/events",
     "/api/v1/snapshot",
+    "/api/v1/metacognition",
+    "/api/v1/coordination",
     "/healthz",
     "/readyz",
     "/metrics",
@@ -48,6 +50,44 @@ required_paths = {
 missing_paths = required_paths - set(OPENAPI["paths"])
 if missing_paths:
     errors.append(f"OpenAPI is missing paths: {sorted(missing_paths)!r}")
+
+projection_refs = {
+    "/api/v1/metacognition": "#/components/schemas/MetacognitionSnapshot",
+    "/api/v1/coordination": "#/components/schemas/CoordinationPlan",
+}
+for path, expected_ref in projection_refs.items():
+    operation = OPENAPI.get("paths", {}).get(path, {}).get("get", {})
+    actual_ref = (
+        operation.get("responses", {})
+        .get("200", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+        .get("$ref")
+    )
+    if actual_ref != expected_ref:
+        errors.append(
+            f"OpenAPI response drift for {path}: expected {expected_ref!r}, got {actual_ref!r}"
+        )
+    if operation.get("security") != [{"bearerAuth": []}]:
+        errors.append(f"OpenAPI read authorization drift for {path}")
+
+coordination_schema = OPENAPI.get("components", {}).get("schemas", {}).get(
+    "CoordinationPlan", {}
+)
+planning_properties = (
+    coordination_schema.get("properties", {})
+    .get("planning_policy", {})
+    .get("properties", {})
+)
+for bound in (
+    "max_assignments",
+    "max_assignments_per_agent",
+    "max_interventions",
+    "max_holds",
+):
+    if planning_properties.get(bound, {}).get("minimum") != 1:
+        errors.append(f"CoordinationPlan {bound} must remain fail-closed at minimum 1")
 
 if CARGO["package"]["name"] != "meta-agent-control-plane":
     errors.append("Cargo package name changed without updating contract tooling")
@@ -62,6 +102,19 @@ script = (ROOT / "scripts/dashboard.js").read_text().strip()
 ui = (ROOT / "src/ui.rs").read_text()
 if script not in ui:
     errors.append("scripts/dashboard.js drifted from the inline Leptos dashboard script")
+
+coordination_script = (ROOT / "scripts/coordination-dashboard.js").read_text()
+for required in (
+    "fetch('/api/v1/coordination'",
+    "sessionStorage.getItem('meta-agent-read-token')",
+    "Authorization: `Bearer ${token()}`",
+    "const esc =",
+):
+    if required not in coordination_script:
+        errors.append(f"coordination dashboard is missing contract fragment: {required}")
+for forbidden in ("localStorage", "eval(", "document.write(", "new Function("):
+    if forbidden in coordination_script:
+        errors.append(f"coordination dashboard contains forbidden construct: {forbidden}")
 
 conflict_pattern = re.compile(r"^(<<<<<<<|=======|>>>>>>>)", re.M)
 for path in ROOT.rglob("*"):
