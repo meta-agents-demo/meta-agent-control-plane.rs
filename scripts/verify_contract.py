@@ -65,6 +65,14 @@ ui = (ROOT / "src/ui.rs").read_text()
 if script not in ui:
     errors.append("scripts/dashboard.js drifted from the inline Leptos dashboard script")
 
+coordination_ui = (ROOT / "src/coordination_ui.rs").read_text()
+coordination_api = (ROOT / "src/coordination_api.rs").read_text()
+if 'include_str!("../scripts/coordination-dashboard.js")' not in coordination_ui:
+    errors.append("coordination UI is not wired to scripts/coordination-dashboard.js")
+for route in ('"/coordination"', '"/api/v1/coordination"'):
+    if route not in coordination_api:
+        errors.append(f"coordination router is missing {route}")
+
 conflict_pattern = re.compile(r"^(<<<<<<<|=======|>>>>>>>)", re.M)
 for path in ROOT.rglob("*"):
     if path.is_file() and ".git" not in path.parts and path.suffix not in {".png", ".jpg", ".jpeg"}:
