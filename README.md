@@ -115,7 +115,7 @@ Open `/metacognition` for the Leptos operator view or read `/api/v1/metacognitio
 
 The coordination planner turns the same bounded snapshot and explainable diagnostics into a dependency-safe, fair-share plan. It emits assignments, operator interventions, and held tasks with stable IDs, priorities, rationales, recommended actions, diagnostic links, and retained source-event provenance.
 
-Open `/coordination` for the Leptos operator view or read `GET /api/v1/coordination` with the configured read token. Both surfaces are advisory and read-only: they do not dispatch work, mutate task ownership, or call any provider. The same planner is available offline through `meta-agent-plan`; see [`docs/coordination-planner.md`](docs/coordination-planner.md) for policy limits and deterministic semantics.
+Open `/coordination` for the Leptos operator view or read `GET /api/v1/coordination` with the configured read token. Both surfaces are advisory and read-only: they do not dispatch work, mutate task ownership, or call any provider. The page authenticates to same-origin `/ws/ui` with a first-message token frame, coalesces revision updates and lag-resync notices into bounded refetches, reconnects with capped exponential backoff, and retains a 30-second safety poll. The same planner is available offline through `meta-agent-plan`; see [`docs/coordination-planner.md`](docs/coordination-planner.md) for policy limits and deterministic semantics.
 
 ## Bounded in-memory state
 
@@ -159,7 +159,7 @@ Agent registration, goal/task definitions, task start/completion, and learned le
 | `/api/v1/coordination` | Deterministic dependency-safe coordination plan |
 | `/api/v1/events` | HTTP event ingestion |
 | `/ws/agent` | Agent ingestion socket |
-| `/ws/ui` | Live UI invalidation stream |
+| `/ws/ui` | Authenticated revision invalidation stream for operator pages |
 
 ## Configuration
 
@@ -177,6 +177,7 @@ node --check scripts/dashboard.js
 node --check scripts/metacognition-dashboard.js
 node --check scripts/coordination-dashboard.js
 python3 scripts/verify_contract.py
+python3 scripts/test_coordination_dashboard.py
 ```
 
 CI runs the real-daemon client transport tests and executes the provider sidecar binary against deterministic fixtures. It also builds the OCI image from `Cargo.lock`, verifies its non-root entrypoint, boots it with a read-only root and dropped capabilities, and probes liveness and readiness.
