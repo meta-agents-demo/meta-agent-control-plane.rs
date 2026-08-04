@@ -2,7 +2,7 @@
 
 A single-process Rust daemon and Leptos SSR dashboard for observing AI-agent work, coordinating meta-tasks, and retaining bounded, reusable lessons.
 
-The server is provider-neutral. OpenAI/ChatGPT-backed agents, Anthropic/Claude-backed agents, Google/Gemini-backed agents, local models, and custom runtimes all emit the same structured event protocol over HTTP, WebSocket, TCP, or UDP. The human operator opens one web UI to see agents, goals, tasks, progress, blockers, explicit reflections, lessons, transport activity, and memory pressure.
+The server is provider-neutral. OpenAI API-backed agents, Anthropic/Claude-backed agents, Google/Gemini-backed agents, local models, and custom runtimes all emit the same structured event protocol over HTTP, WebSocket, TCP, or UDP. The human operator opens one web UI to see agents, goals, tasks, progress, blockers, explicit reflections, lessons, transport activity, memory pressure, and explainable metacognition diagnostics.
 
 > This project records observable summaries, claims, evidence references, confidence, assumptions, risks, decisions, and next actions. It does not request, store, or expose hidden chain-of-thought or private model reasoning.
 
@@ -13,7 +13,7 @@ The server is provider-neutral. OpenAI/ChatGPT-backed agents, Anthropic/Claude-b
 - **TCP NDJSON** — reliable local-daemon or sidecar ingestion.
 - **UDP JSON** — best-effort, low-authority telemetry only.
 
-The same Tokio process serves Axum APIs, the Leptos SSR dashboard, WebSockets, TCP, UDP, health/readiness, Prometheus metrics, and OpenAPI.
+The same Tokio process serves Axum APIs, the Leptos SSR dashboards, WebSockets, TCP, UDP, health/readiness, Prometheus metrics, and OpenAPI.
 
 ## Quick start
 
@@ -50,7 +50,30 @@ Provider-neutral Rust examples are included:
 ```bash
 META_AGENT_TOKEN='replace-with-at-least-16-bytes' cargo run --example tcp_progress
 META_AGENT_TOKEN='replace-with-at-least-16-bytes' cargo run --example udp_heartbeat
+META_AGENT_TOKEN='replace-with-at-least-16-bytes' cargo run --example mock_provider_parallel
 ```
+
+## Provider sidecar and embedded Rust client
+
+`meta-agent-sidecar` converts observable OpenAI, Anthropic, or Gemini lifecycle updates into the canonical protocol and sends them through the same Rust client used by tests and examples.
+
+```bash
+cargo run --bin meta-agent-sidecar -- \
+  --provider openai \
+  --dry-run \
+  < fixtures/providers/openai-progress.json
+
+META_AGENT_TOKEN='replace-with-at-least-16-bytes' \
+  cargo run --bin meta-agent-sidecar -- \
+    --provider anthropic \
+    --transport websocket \
+    --endpoint ws://127.0.0.1:8787/ws/agent \
+    < fixtures/providers/anthropic-reflection.json
+```
+
+The sidecar rejects hidden-reasoning fields recursively, never inserts provider credentials or the control-plane token into an event, and never echoes a rejected payload. The embedded client supports authenticated HTTP, WebSocket, TCP, and UDP acknowledgements with event-ID and transport validation. UDP command/control events fail locally before transmission.
+
+This is an integration surface for programmable API-backed agents. It does not claim that the ChatGPT consumer product offers a direct daemon connection. See [`docs/provider-sidecar.md`](docs/provider-sidecar.md) for the exact payloads, privacy boundary, TLS guidance, and runnable demos.
 
 ## Event model
 
@@ -81,6 +104,12 @@ Every message uses a versioned envelope:
 ```
 
 See [`docs/protocol.md`](docs/protocol.md) for event shapes, reliability semantics, UDP policy, idempotency, ordering, and privacy boundaries.
+
+## Explainable metacognition
+
+The deterministic metacognition engine derives visible diagnostics only from retained public state. It detects stalls, retry loops, unresolved or missing dependencies, dependency cycles, orphan goals, missing evidence, low confidence, missing next actions, and contradictory completion state. It keeps self-reported progress separate from evidence-backed progress and exposes event IDs supporting each explanation when those events remain retained.
+
+Open `/metacognition` for the Leptos operator view or read `/api/v1/metacognition` with the configured read token. No hidden reasoning is requested or reconstructed.
 
 ## Bounded in-memory state
 
@@ -113,11 +142,13 @@ Agent registration, goal/task definitions, task start/completion, and learned le
 | Route | Purpose |
 | --- | --- |
 | `/` | Leptos SSR operator dashboard |
+| `/metacognition` | Explainable metacognition dashboard |
 | `/healthz` | Liveness and current revision |
 | `/readyz` | Readiness |
 | `/metrics` | Prometheus text exposition |
 | `/openapi.json` | Runtime OpenAPI document |
 | `/api/v1/snapshot` | Current bounded projection |
+| `/api/v1/metacognition` | Deterministic diagnostic projection |
 | `/api/v1/events` | HTTP event ingestion |
 | `/ws/agent` | Agent ingestion socket |
 | `/ws/ui` | Live UI invalidation stream |
@@ -135,10 +166,11 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --all-targets --locked
 node --check scripts/dashboard.js
+node --check scripts/metacognition-dashboard.js
 python3 scripts/verify_contract.py
 ```
 
-The inline dashboard script is mirrored in `scripts/dashboard.js` so its JavaScript syntax can be checked independently. CI also builds the OCI image from `Cargo.lock`, verifies its non-root entrypoint, boots it with a read-only root and dropped capabilities, and probes liveness and readiness.
+CI runs the real-daemon client transport tests and executes the provider sidecar binary against deterministic fixtures. It also builds the OCI image from `Cargo.lock`, verifies its non-root entrypoint, boots it with a read-only root and dropped capabilities, and probes liveness and readiness.
 
 ## Deployment
 
@@ -158,24 +190,30 @@ docker run --rm \
   --udp-addr 0.0.0.0:8789
 ```
 
-Terminate TLS at a trusted reverse proxy for remote HTTP/WebSocket deployments. TCP and UDP need a private network, VPN, or transport-level security wrapper for confidentiality.
+Terminate TLS at a trusted reverse proxy for remote HTTP/WebSocket deployments. TCP and UDP need a private network, VPN, or transport-level security wrapper for confidentiality. The small embedded client deliberately supports only local/plain `http://` and `ws://`; use a local TLS terminator or private tunnel rather than assuming it validates remote TLS.
 
 ## Repository layout
 
 ```text
-src/model.rs      versioned provider-neutral protocol
-src/store.rs      bounded projections and semantic reducer
-src/http.rs       Axum API, WebSockets, metrics, security headers
-src/tcp.rs        bounded NDJSON TCP listener
-src/udp.rs        telemetry-only UDP listener
-src/ui.rs         Leptos SSR dashboard
-src/daemon.rs     one-process lifecycle and listener binding
-src/auth.rs       constant-time shared-token policy
-src/config.rs     validated CLI/environment configuration
-docs/             architecture, protocol, and checked-in OpenAPI
-fixtures/         valid and invalid protocol fixtures
+src/model.rs                 versioned provider-neutral protocol
+src/store.rs                 bounded projections and semantic reducer
+src/metacognition/           deterministic explainable analysis engine
+src/metacognition_api.rs     protected analysis API
+src/metacognition_ui.rs      Leptos analysis dashboard
+src/client.rs                provider-neutral HTTP/WS/TCP/UDP Rust client
+src/bin/meta-agent-sidecar.rs provider observation sidecar
+src/provider.rs              OpenAI, Anthropic, and Gemini normalizers
+src/http.rs                  Axum API, WebSockets, metrics, security headers
+src/tcp.rs                   bounded NDJSON TCP listener
+src/udp.rs                   telemetry-only UDP listener
+src/ui.rs                    Leptos SSR dashboard
+src/daemon.rs                one-process lifecycle and listener binding
+src/auth.rs                  constant-time shared-token policy
+src/config.rs                validated CLI/environment configuration
+docs/                        architecture, protocol, OpenAPI, and sidecar guides
+fixtures/                    canonical and deterministic provider fixtures
 ```
 
 ## Project tracking
 
-The canonical implementation issue is `DEN-1057`. Repository publication and the recovered implementation were completed through reviewed GitHub history; bootstrap lifecycle and publication-infrastructure evidence is tracked in `DEN-1058` and `DEN-319`. Protocol, transport, observability, and promotion follow-up remains tracked in `DEN-1061`, `DEN-1067`, and `DEN-1069`.
+The canonical implementation issue is `DEN-1057`. Repository publication and the recovered implementation were completed through reviewed GitHub history; bootstrap lifecycle and publication-infrastructure evidence is tracked in `DEN-1058` and `DEN-319`. Protocol, transport, bounded state, metacognition, UI, provider adapters, security, and merge gates are tracked in `DEN-1061` through `DEN-1069`.
