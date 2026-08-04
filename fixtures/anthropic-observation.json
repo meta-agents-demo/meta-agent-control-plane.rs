@@ -1,0 +1,26 @@
+{
+  "message_id": "msg-anthropic-42",
+  "context": {
+    "agent_id": "review-agent",
+    "model": "claude",
+    "instance_id": "anthropic-worker-1",
+    "session_id": "run-42",
+    "correlation_id": "goal-17",
+    "sequence": 13
+  },
+  "observation": "reflection",
+  "task_id": "task-provider-normalization",
+  "summary": "The provider adapters preserve observable semantics without retaining hidden reasoning.",
+  "confidence": 0.92,
+  "assumptions": ["The adapter payload contains only operator-visible observations."],
+  "evidence": [
+    {
+      "kind": "test",
+      "reference": "tests/provider_adapters.rs",
+      "summary": "Cross-provider projection equivalence"
+    }
+  ],
+  "alternatives_considered": ["Store raw provider responses."],
+  "risks": ["Provider schema drift must be handled at the adapter boundary."],
+  "next_action": "Run deterministic fixture tests."
+}

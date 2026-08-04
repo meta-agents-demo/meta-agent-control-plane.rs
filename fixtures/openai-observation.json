@@ -1,0 +1,16 @@
+{
+  "response_id": "resp-openai-42",
+  "context": {
+    "agent_id": "review-agent",
+    "model": "gpt",
+    "instance_id": "openai-worker-1",
+    "session_id": "run-42",
+    "correlation_id": "goal-17",
+    "sequence": 12
+  },
+  "observation": "progress",
+  "task_id": "task-provider-normalization",
+  "progress": 0.7,
+  "summary": "Normalized the OpenAI response into the shared event protocol.",
+  "next_action": "Compare the projection with the other provider adapters."
+}

@@ -6,6 +6,7 @@ pub mod daemon;
 pub mod http;
 pub mod model;
 pub mod openapi;
+pub mod provider;
 pub mod store;
 pub mod tcp;
 pub mod udp;

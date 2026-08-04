@@ -1,0 +1,17 @@
+{
+  "response_id": "resp-gemini-42",
+  "context": {
+    "agent_id": "review-agent",
+    "model": "gemini",
+    "instance_id": "gemini-worker-1",
+    "session_id": "run-42",
+    "correlation_id": "goal-17",
+    "sequence": 14
+  },
+  "observation": "tool_call",
+  "task_id": "task-provider-normalization",
+  "tool_name": "run_tests",
+  "call_id": "gemini-call-7",
+  "summary": "Execute provider adapter conformance tests.",
+  "attempt": 2
+}
