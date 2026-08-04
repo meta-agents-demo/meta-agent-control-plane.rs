@@ -375,9 +375,7 @@ fn plan_from_analysis(
     }
 }
 
-fn diagnostics_by_task(
-    diagnostics: &[Diagnostic],
-) -> BTreeMap<TaskKey, Vec<&Diagnostic>> {
+fn diagnostics_by_task(diagnostics: &[Diagnostic]) -> BTreeMap<TaskKey, Vec<&Diagnostic>> {
     let mut result = BTreeMap::new();
     for diagnostic in diagnostics {
         if let Some(task_id) = diagnostic.task_id.as_deref() {
