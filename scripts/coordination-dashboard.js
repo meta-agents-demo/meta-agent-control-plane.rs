@@ -1,5 +1,12 @@
 (() => {
-  const state = { plan: null };
+  const state = {
+    plan: null,
+    socket: null,
+    retry: 0,
+    refreshing: false,
+    dirty: false,
+    refreshTimer: null
+  };
   const $ = (id) => document.getElementById(id);
   const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
@@ -22,6 +29,11 @@
     $('error-banner').hidden = true;
   }
 
+  function setConnected(connected, text) {
+    $('stream-indicator').className = `stream ${connected ? 'online' : 'offline'}`;
+    $('stream-label').textContent = text;
+  }
+
   function provenance(item) {
     if (!item.source_events_retained) return 'Some causal events are no longer retained';
     const count = Array.isArray(item.source_event_ids) ? item.source_event_ids.length : 0;
@@ -34,6 +46,11 @@
   }
 
   async function refresh() {
+    if (state.refreshing) {
+      state.dirty = true;
+      return;
+    }
+    state.refreshing = true;
     try {
       const response = await fetch('/api/v1/coordination', {
         headers: headers(),
@@ -45,7 +62,21 @@
       clearError();
     } catch (error) {
       showError(error.message || String(error));
+    } finally {
+      state.refreshing = false;
+      if (state.dirty) {
+        state.dirty = false;
+        scheduleRefresh();
+      }
     }
+  }
+
+  function scheduleRefresh() {
+    if (state.refreshTimer) return;
+    state.refreshTimer = setTimeout(() => {
+      state.refreshTimer = null;
+      refresh();
+    }, 100);
   }
 
   function render(plan) {
@@ -119,12 +150,62 @@
       </tr>`).join('');
   }
 
+  function connect() {
+    if (state.socket) {
+      state.socket.onclose = null;
+      state.socket.close();
+    }
+    const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(`${scheme}//${location.host}/ws/ui`);
+    state.socket = socket;
+    setConnected(false, 'Connecting');
+
+    socket.onopen = () => socket.send(JSON.stringify({ token: token() }));
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.kind === 'authenticated') {
+          state.retry = 0;
+          setConnected(true, 'Live');
+          refresh();
+          return;
+        }
+        if (message.error) {
+          showError(message.message || message.error);
+          setConnected(false, 'Unauthorized');
+          return;
+        }
+        if (message.kind === 'resync_required') {
+          scheduleRefresh();
+          return;
+        }
+        if (Number.isInteger(message.revision) && (!state.plan || message.revision > state.plan.revision)) {
+          scheduleRefresh();
+        }
+      } catch (_) {
+        scheduleRefresh();
+      }
+    };
+    socket.onerror = () => setConnected(false, 'Connection error');
+    socket.onclose = () => {
+      if (state.socket !== socket) return;
+      setConnected(false, 'Reconnecting');
+      const delay = Math.min(15000, 600 * (2 ** state.retry++));
+      setTimeout(connect, delay);
+    };
+  }
+
   $('save-token').addEventListener('click', () => {
-    sessionStorage.setItem('meta-agent-read-token', $('auth-token').value.trim());
+    const value = $('auth-token').value.trim();
+    if (value) sessionStorage.setItem('meta-agent-read-token', value);
+    else sessionStorage.removeItem('meta-agent-read-token');
+    state.retry = 0;
+    connect();
     refresh();
   });
   $('refresh').addEventListener('click', refresh);
   $('auth-token').value = token();
   refresh();
-  setInterval(refresh, 5000);
+  connect();
+  setInterval(refresh, 30000);
 })();
