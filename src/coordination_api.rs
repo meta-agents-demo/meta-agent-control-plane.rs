@@ -51,9 +51,7 @@ pub fn router(state: AppState) -> Router {
 }
 
 async fn page(State(state): State<AppState>) -> Html<String> {
-    Html(coordination_ui::dashboard(
-        state.auth.reads_are_protected(),
-    ))
+    Html(coordination_ui::dashboard(state.auth.reads_are_protected()))
 }
 
 async fn plan(
