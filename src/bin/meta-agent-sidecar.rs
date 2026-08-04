@@ -154,13 +154,14 @@ async fn run(args: Args) -> Result<(), SidecarError> {
             })?;
 
         if let Some(client) = client.as_ref() {
-            let acknowledgement = client
-                .send(&event)
-                .await
-                .map_err(|source| SidecarError::Client {
-                    line: line_number,
-                    source,
-                })?;
+            let acknowledgement =
+                client
+                    .send(&event)
+                    .await
+                    .map_err(|source| SidecarError::Client {
+                        line: line_number,
+                        source,
+                    })?;
             println!(
                 "{}",
                 serde_json::to_string(&acknowledgement).expect("ack serializes")
@@ -180,12 +181,15 @@ async fn run(args: Args) -> Result<(), SidecarError> {
 }
 
 fn transport(args: &Args) -> Result<ClientTransport, SidecarError> {
-    let endpoint = args.endpoint.clone().unwrap_or_else(|| match args.transport {
-        TransportArg::Http => "http://127.0.0.1:8787/api/v1/events".to_owned(),
-        TransportArg::WebSocket => "ws://127.0.0.1:8787/ws/agent".to_owned(),
-        TransportArg::Tcp => "127.0.0.1:8788".to_owned(),
-        TransportArg::Udp => "127.0.0.1:8789".to_owned(),
-    });
+    let endpoint = args
+        .endpoint
+        .clone()
+        .unwrap_or_else(|| match args.transport {
+            TransportArg::Http => "http://127.0.0.1:8787/api/v1/events".to_owned(),
+            TransportArg::WebSocket => "ws://127.0.0.1:8787/ws/agent".to_owned(),
+            TransportArg::Tcp => "127.0.0.1:8788".to_owned(),
+            TransportArg::Udp => "127.0.0.1:8789".to_owned(),
+        });
     match args.transport {
         TransportArg::Http => Ok(ClientTransport::Http { endpoint }),
         TransportArg::WebSocket => Ok(ClientTransport::WebSocket { endpoint }),
