@@ -75,6 +75,32 @@
         }
       }
     },
+    "/api/v1/metacognition": {
+      "get": {
+        "summary": "Read the current explainable metacognition projection",
+        "description": "Returns deterministic diagnostics, evidence-backed progress, critical paths, stalls, retry loops, and recommended actions derived only from visible retained state.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current metacognition projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetacognitionSnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Read API authentication failed"
+          }
+        }
+      }
+    },
     "/api/v1/snapshot": {
       "get": {
         "summary": "Read the current bounded in-memory projection",
@@ -262,6 +288,10 @@
             "$ref": "#/components/schemas/EventEnvelope"
           }
         }
+      },
+      "MetacognitionSnapshot": {
+        "type": "object",
+        "description": "Deterministic read-only projection of visible progress, evidence, dependency, retry, stall, and consistency diagnostics."
       },
       "CoordinationPlan": {
         "type": "object",
