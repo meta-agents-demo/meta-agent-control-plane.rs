@@ -24,6 +24,8 @@ A `CoordinationPlan` contains three separate classes of result:
 
 Every assignment and intervention includes a deterministic ID, priority, public rationale, recommended action, diagnostic IDs, and retained source event IDs when available.
 
+Assignments are recommendations, not queue claims or distributed leases. A runtime that executes them must still apply its own authorization, concurrency, freshness, and idempotency controls. Rebuild the plan after accepted state changes rather than treating an old plan as an imperative command stream.
+
 ## Assignment precedence
 
 For an otherwise eligible task, the highest-priority visible condition wins:
