@@ -102,6 +102,46 @@ pub fn document(
                     }
                 }
             },
+            "/api/v1/explorer": {
+                "get": {
+                    "summary": "Read the bounded operator explorer projection",
+                    "description": "Returns sorted agents, retained sessions, recent timeline events, lessons, cache pressure, counters, and explicit retention omissions from one coherent snapshot. The endpoint is read-only.",
+                    "security": read_security.clone(),
+                    "parameters": [
+                        {
+                            "name": "timeline_limit",
+                            "in": "query",
+                            "required": false,
+                            "schema": { "type": "integer", "minimum": 1, "maximum": 250, "default": 100 }
+                        },
+                        {
+                            "name": "session_limit",
+                            "in": "query",
+                            "required": false,
+                            "schema": { "type": "integer", "minimum": 1, "maximum": 250, "default": 100 }
+                        },
+                        {
+                            "name": "lesson_limit",
+                            "in": "query",
+                            "required": false,
+                            "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 250 }
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Current operator explorer projection",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/ExplorerSnapshot" }
+                                }
+                            }
+                        },
+                        "400": { "description": "Explorer query was malformed, unknown, duplicated, zero, or above its server cap" },
+                        "401": { "description": "Read API authentication failed" },
+                        "500": { "description": "The explorer projection could not be produced" }
+                    }
+                }
+            },
             "/api/v1/metacognition": {
                 "get": {
                     "summary": "Read the current explainable metacognition projection",
@@ -233,6 +273,10 @@ pub fn document(
                     "type": "object",
                     "description": "Bounded LRU projection containing agents, goals, tasks, lessons, recent events, an independent idempotency window, counters, and cache pressure."
                 },
+                "ExplorerSnapshot": {
+                    "type": "object",
+                    "description": "Read-only bounded operator projection containing sorted agents, retained session summaries, timeline events, lessons, system pressure, counters, policy, and explicit omission counts."
+                },
                 "MetacognitionSnapshot": {
                     "type": "object",
                     "description": "Deterministic read-only projection of visible progress, evidence, dependency, retry, stall, and consistency diagnostics."
@@ -304,6 +348,17 @@ mod tests {
             256
         );
         assert_eq!(
+            document["paths"]["/api/v1/explorer"]["get"]["responses"]["200"]["content"]["application/json"]
+                ["schema"]["$ref"],
+            "#/components/schemas/ExplorerSnapshot"
+        );
+        assert_eq!(
+            document["paths"]["/api/v1/explorer"]["get"]["parameters"]
+                .as_array()
+                .map(Vec::len),
+            Some(3)
+        );
+        assert_eq!(
             document["paths"]["/api/v1/metacognition"]["get"]["responses"]["200"]["content"]["application/json"]
                 ["schema"]["$ref"],
             "#/components/schemas/MetacognitionSnapshot"
@@ -344,6 +399,10 @@ mod tests {
         assert_eq!(
             checked_in["paths"]["/api/v1/coordination"]["get"]["parameters"],
             runtime["paths"]["/api/v1/coordination"]["get"]["parameters"]
+        );
+        assert_eq!(
+            checked_in["paths"]["/api/v1/explorer"]["get"]["parameters"],
+            runtime["paths"]["/api/v1/explorer"]["get"]["parameters"]
         );
     }
 }
