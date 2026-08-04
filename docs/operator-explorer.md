@@ -18,6 +18,24 @@ curl --fail-with-body \
 
 Authentication is evaluated before query parsing. An unauthenticated malformed query returns `401`, not query-validation details.
 
+## Leptos operator page
+
+Open `/explorer` for the server-rendered operator shell. Protected data is not embedded in the HTML response. The browser reads `/api/v1/explorer` only after applying the session-scoped read token.
+
+The page displays:
+
+- current agent identity, status, provider/model, session, goal, active task, capabilities, latest reflection, and latest error;
+- retained session summaries and transport counts;
+- a retained event timeline with visible normalized payloads;
+- retained learned lessons and confidence;
+- cache length, capacity, pressure, and eviction counts;
+- accepted, duplicate, and rejected ingestion counters;
+- explicit response-retention totals and omissions.
+
+The limit controls use the same server defaults and maxima as the API. A client-side search filters only the already returned retained projection and does not alter the server query or imply historical completeness.
+
+The page authenticates to same-origin `/ws/ui` with the read token in the first JSON frame, never in the URL. Newer revisions and `resync_required` notices coalesce into bounded refetches, reconnect delay is capped at 15 seconds, and a 30-second poll remains as a safety net.
+
 ## Projection contents
 
 The response contains:
@@ -91,9 +109,10 @@ The explorer:
 - writes no database or file;
 - does not touch LRU recency because it operates on an already materialized snapshot;
 - exposes only normalized visible state;
+- HTML-escapes every dynamic value before inserting it into the operator page;
 - never requests, reconstructs, or emits hidden reasoning.
 
-A future Leptos explorer page can consume this endpoint and the existing authenticated `/ws/ui` invalidation stream without changing the projection contract.
+The browser token remains in session storage, is sent only as a Bearer header or first WebSocket message, and is never included in a URL.
 
 ## Test coverage
 
@@ -108,4 +127,8 @@ Rust and repository-contract tests cover:
 - explicit omission counts;
 - repeated projection equality for one snapshot and policy;
 - runtime and checked-in OpenAPI path and parameter synchronization;
-- composed-router read protection.
+- static-shell privacy and composed-router page coverage;
+- same-origin WebSocket use and first-message authentication;
+- absence of query-string credentials and mutation methods;
+- revision/resync coalescing and bounded reconnect;
+- client limit validation, retention display, and dynamic HTML escaping.
