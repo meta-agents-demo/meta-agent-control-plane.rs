@@ -39,10 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (provider, fixture, normalize) in observations {
         let event = normalize(serde_json::from_str(fixture)?)?;
         let acknowledgement = client.send(&event).await?;
-        println!(
-            "{provider}: {}",
-            serde_json::to_string(&acknowledgement)?
-        );
+        println!("{provider}: {}", serde_json::to_string(&acknowledgement)?);
     }
     Ok(())
 }
