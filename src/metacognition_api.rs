@@ -69,12 +69,7 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    use crate::{
-        auth::AuthPolicy,
-        config::Config,
-        daemon::BoundAddresses,
-        store::Store,
-    };
+    use crate::{auth::AuthPolicy, config::Config, daemon::BoundAddresses, store::Store};
 
     use super::*;
 
@@ -138,9 +133,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(authorized.status(), StatusCode::OK);
-        let body = to_bytes(authorized.into_body(), usize::MAX)
-            .await
-            .unwrap();
+        let body = to_bytes(authorized.into_body(), usize::MAX).await.unwrap();
         let projection: MetacognitionSnapshot = serde_json::from_slice(&body).unwrap();
         assert_eq!(projection.revision, 0);
         assert_eq!(projection.summary.total_tasks, 0);
