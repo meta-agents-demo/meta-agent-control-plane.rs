@@ -64,15 +64,69 @@ jobs:
           fi
 
   container:
-    name: OCI image
+    name: OCI runtime contract
     needs: rust
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out without persisted credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Build the production image
+      - name: Build the production image from the committed lockfile
         run: docker build --tag meta-agent-control-plane:ci .
+
+      - name: Verify immutable image metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='meta-agent-control-plane:ci'
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = '10001:10001'
+          test "$(docker image inspect --format '{{index .Config.Entrypoint 0}}' "$image")" = '/usr/local/bin/meta-agent-control-plane'
+          test "$(docker image inspect --format '{{index .Config.Cmd 0}}' "$image")" = '--http-addr'
+
+      - name: Boot a read-only non-root container and probe health
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='meta-agent-control-plane:ci'
+          container='meta-agent-control-plane-ci'
+          cleanup() {
+            docker rm --force "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run --detach \
+            --name "$container" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --env META_AGENT_AUTH_TOKEN='ci-runtime-token-at-least-16-bytes' \
+            --env META_AGENT_PROTECT_READ_API=true \
+            --publish 127.0.0.1::8787 \
+            "$image" >/dev/null
+
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true
+          test "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "$container")" = '["ALL"]'
+          test "$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$container")" = '["no-new-privileges"]'
+
+          port="$(docker port "$container" 8787/tcp | sed -E 's/.*:([0-9]+)$/\1/' | head -n 1)"
+          test -n "$port"
+
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error "http://127.0.0.1:${port}/healthz" >/dev/null; then
+              ready=true
+              break
+            fi
+            if test "$(docker inspect --format '{{.State.Running}}' "$container")" != true; then
+              docker logs "$container" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$ready" = true
+          curl --fail --silent --show-error "http://127.0.0.1:${port}/healthz"
+          curl --fail --silent --show-error "http://127.0.0.1:${port}/readyz"

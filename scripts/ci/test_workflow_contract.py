@@ -8,6 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CI = ROOT / ".github/workflows/ci.yml"
 WORKFLOW_CONTRACT = ROOT / ".github/workflows/workflow-contract.yml"
+DOCKERFILE = ROOT / "Dockerfile"
 LOCKFILE = ROOT / "Cargo.lock"
 PINNED_ACTION = re.compile(r"uses:\s+[^@\s]+@[0-9a-f]{40}(?:\s+#.*)?$")
 PINNED_ACTIONLINT_IMAGE = re.compile(r"rhysd/actionlint@sha256:[0-9a-f]{64}")
@@ -18,6 +19,7 @@ class WorkflowContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.ci = CI.read_text(encoding="utf-8")
         cls.contract = WORKFLOW_CONTRACT.read_text(encoding="utf-8")
+        cls.dockerfile = DOCKERFILE.read_text(encoding="utf-8")
 
     def test_cargo_lock_is_committed_and_generation_is_not_hidden_in_ci(self) -> None:
         self.assertTrue(LOCKFILE.is_file())
@@ -25,6 +27,10 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("cargo generate-lockfile", self.ci)
         self.assertIn("cargo clippy --workspace --all-targets --locked", self.ci)
         self.assertIn("cargo test --workspace --all-targets --locked", self.ci)
+        self.assertIn(
+            "cargo build --locked --release --bin meta-agent-control-plane",
+            self.dockerfile,
+        )
 
     def test_all_repository_actions_are_immutable(self) -> None:
         for workflow in (CI, WORKFLOW_CONTRACT):
@@ -55,6 +61,22 @@ class WorkflowContractTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertIn(command, self.ci)
+
+    def test_ci_boots_the_production_image_with_runtime_hardening(self) -> None:
+        for contract in (
+            "--read-only",
+            "--tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m",
+            "--cap-drop ALL",
+            "--security-opt no-new-privileges",
+            "META_AGENT_AUTH_TOKEN='ci-runtime-token-at-least-16-bytes'",
+            "META_AGENT_PROTECT_READ_API=true",
+            "{{.Config.User}}",
+            "{{.HostConfig.ReadonlyRootfs}}",
+            "/healthz",
+            "/readyz",
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, self.ci)
 
     def test_workflow_contract_uses_actionlint_and_tests_itself(self) -> None:
         self.assertIn("docker run --rm", self.contract)

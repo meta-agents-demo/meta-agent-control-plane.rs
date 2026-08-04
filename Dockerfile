@@ -1,7 +1,7 @@
 FROM rust:1.97.1-bookworm AS builder
 WORKDIR /workspace
 COPY . .
-RUN cargo build --release --bin meta-agent-control-plane
+RUN cargo build --locked --release --bin meta-agent-control-plane
 
 FROM debian:bookworm-slim AS runtime
 RUN useradd --system --uid 10001 --create-home meta-agent
