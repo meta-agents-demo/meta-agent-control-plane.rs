@@ -1,0 +1,16 @@
+{
+  "response_id": "resp-openai-demo-1",
+  "context": {
+    "agent_id": "openai-demo-agent",
+    "model": "gpt-5.6",
+    "instance_id": "mock-openai-1",
+    "session_id": "parallel-demo-session",
+    "correlation_id": "parallel-demo-goal",
+    "sequence": 1
+  },
+  "observation": "progress",
+  "task_id": "research-current-state",
+  "progress": 0.55,
+  "summary": "Collected observable repository and test evidence.",
+  "next_action": "Compare the evidence with the acceptance criteria."
+}
