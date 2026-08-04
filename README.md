@@ -2,7 +2,7 @@
 
 A single-process Rust daemon and Leptos SSR dashboard for observing AI-agent work, coordinating meta-tasks, and retaining bounded, reusable lessons.
 
-The server is provider-neutral. OpenAI API-backed agents, Anthropic/Claude-backed agents, Google/Gemini-backed agents, local models, and custom runtimes all emit the same structured event protocol over HTTP, WebSocket, TCP, or UDP. The human operator opens one web UI to see agents, goals, tasks, progress, blockers, explicit reflections, lessons, transport activity, memory pressure, and explainable metacognition diagnostics.
+The server is provider-neutral. OpenAI API-backed agents, Anthropic/Claude-backed agents, Google/Gemini-backed agents, local models, and custom runtimes all emit the same structured event protocol over HTTP, WebSocket, TCP, or UDP. The human operator opens one web UI to see agents, goals, tasks, progress, blockers, explicit reflections, lessons, transport activity, memory pressure, explainable metacognition diagnostics, and deterministic coordination plans.
 
 > This project records observable summaries, claims, evidence references, confidence, assumptions, risks, decisions, and next actions. It does not request, store, or expose hidden chain-of-thought or private model reasoning.
 
@@ -111,6 +111,12 @@ The deterministic metacognition engine derives visible diagnostics only from ret
 
 Open `/metacognition` for the Leptos operator view or read `/api/v1/metacognition` with the configured read token. No hidden reasoning is requested or reconstructed.
 
+## Deterministic coordination plan
+
+The coordination planner turns the same bounded snapshot and explainable diagnostics into a dependency-safe, fair-share plan. It emits assignments, operator interventions, and held tasks with stable IDs, priorities, rationales, recommended actions, diagnostic links, and retained source-event provenance.
+
+Read the current plan at `GET /api/v1/coordination` with the configured read token. The endpoint is read-only: it does not dispatch work, mutate task ownership, or call any provider. The same planner is available offline through `meta-agent-plan`; see [`docs/coordination-planner.md`](docs/coordination-planner.md) for policy limits and deterministic semantics.
+
 ## Bounded in-memory state
 
 The MVP deliberately has no database. `lru::LruCache` instances bound agents, goals, tasks, lessons, recent events, and the independent event-ID idempotency window. Capacities are configurable, pressure and evictions are exposed in the snapshot/UI/metrics, and domain storage is isolated behind the `Store` API so a durable backend can follow without changing transports.
@@ -149,6 +155,7 @@ Agent registration, goal/task definitions, task start/completion, and learned le
 | `/openapi.json` | Runtime OpenAPI document |
 | `/api/v1/snapshot` | Current bounded projection |
 | `/api/v1/metacognition` | Deterministic diagnostic projection |
+| `/api/v1/coordination` | Deterministic dependency-safe coordination plan |
 | `/api/v1/events` | HTTP event ingestion |
 | `/ws/agent` | Agent ingestion socket |
 | `/ws/ui` | Live UI invalidation stream |
@@ -195,23 +202,25 @@ Terminate TLS at a trusted reverse proxy for remote HTTP/WebSocket deployments. 
 ## Repository layout
 
 ```text
-src/model.rs                 versioned provider-neutral protocol
-src/store.rs                 bounded projections and semantic reducer
-src/metacognition/           deterministic explainable analysis engine
-src/metacognition_api.rs     protected analysis API
-src/metacognition_ui.rs      Leptos analysis dashboard
-src/client.rs                provider-neutral HTTP/WS/TCP/UDP Rust client
+src/model.rs                  versioned provider-neutral protocol
+src/store.rs                  bounded projections and semantic reducer
+src/metacognition/            deterministic explainable analysis engine
+src/metacognition_api.rs      protected analysis API
+src/metacognition_ui.rs       Leptos analysis dashboard
+src/coordination.rs           deterministic fair-share coordination planner
+src/coordination_api.rs       protected read-only coordination API
+src/client.rs                 provider-neutral HTTP/WS/TCP/UDP Rust client
 src/bin/meta-agent-sidecar.rs provider observation sidecar
-src/provider.rs              OpenAI, Anthropic, and Gemini normalizers
-src/http.rs                  Axum API, WebSockets, metrics, security headers
-src/tcp.rs                   bounded NDJSON TCP listener
-src/udp.rs                   telemetry-only UDP listener
-src/ui.rs                    Leptos SSR dashboard
-src/daemon.rs                one-process lifecycle and listener binding
-src/auth.rs                  constant-time shared-token policy
-src/config.rs                validated CLI/environment configuration
-docs/                        architecture, protocol, OpenAPI, and sidecar guides
-fixtures/                    canonical and deterministic provider fixtures
+src/provider.rs               OpenAI, Anthropic, and Gemini normalizers
+src/http.rs                   Axum API, WebSockets, metrics, security headers
+src/tcp.rs                    bounded NDJSON TCP listener
+src/udp.rs                    telemetry-only UDP listener
+src/ui.rs                     Leptos SSR dashboard
+src/daemon.rs                 one-process lifecycle and listener binding
+src/auth.rs                   constant-time shared-token policy
+src/config.rs                 validated CLI/environment configuration
+docs/                         architecture, protocol, OpenAPI, and sidecar guides
+fixtures/                     canonical and deterministic provider fixtures
 ```
 
 ## Project tracking
