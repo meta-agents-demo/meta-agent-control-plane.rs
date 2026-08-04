@@ -49,8 +49,8 @@ class WorkflowContractTests(unittest.TestCase):
             "cargo fmt --all --check",
             "cargo clippy --workspace --all-targets --locked -- -D warnings",
             "cargo test --workspace --all-targets --locked",
-            "bash tests/contract-fixtures.sh",
-            "node --check dashboard/app.js",
+            "python3 scripts/verify_contract.py",
+            "node --check scripts/dashboard.js",
             "docker build --tag meta-agent-control-plane:ci .",
         ):
             with self.subTest(command=command):
