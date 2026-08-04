@@ -115,13 +115,13 @@ pub fn build_timeline_page(
     cursor: Option<TimelineCursor>,
 ) -> Result<TimelinePage, TimelineError> {
     let policy = policy.validate()?;
-    if let Some(cursor) = cursor {
-        if cursor.revision != snapshot.revision {
-            return Err(TimelineError::RevisionChanged {
-                requested: cursor.revision,
-                current: snapshot.revision,
-            });
-        }
+    if let Some(cursor) = cursor
+        && cursor.revision != snapshot.revision
+    {
+        return Err(TimelineError::RevisionChanged {
+            requested: cursor.revision,
+            current: snapshot.revision,
+        });
     }
 
     let mut retained = snapshot.recent_events.clone();
