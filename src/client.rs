@@ -97,7 +97,9 @@ impl ClientConfig {
 
     pub fn validate(&self) -> Result<(), ClientError> {
         if self.timeout.is_zero() {
-            return Err(ClientError::InvalidConfig("timeout must be greater than zero"));
+            return Err(ClientError::InvalidConfig(
+                "timeout must be greater than zero",
+            ));
         }
         if self.max_response_bytes == 0 || self.max_response_bytes > MAX_CLIENT_RESPONSE_BYTES {
             return Err(ClientError::InvalidConfig(
@@ -168,9 +170,7 @@ impl EventClient {
         let expected_transport = self.config.transport.protocol_transport();
         let ack = match &self.config.transport {
             ClientTransport::Http { endpoint } => self.send_http(endpoint, event).await?,
-            ClientTransport::WebSocket { endpoint } => {
-                self.send_websocket(endpoint, event).await?
-            }
+            ClientTransport::WebSocket { endpoint } => self.send_websocket(endpoint, event).await?,
             ClientTransport::Tcp { address } => self.send_tcp(*address, event).await?,
             ClientTransport::Udp { address } => self.send_udp(*address, event).await?,
         };
@@ -220,8 +220,9 @@ impl EventClient {
                 maximum: self.config.max_response_bytes,
             });
         }
-        let separator = find_subsequence(&response, b"\r\n\r\n")
-            .ok_or_else(|| ClientError::InvalidResponse("HTTP headers were incomplete".to_owned()))?;
+        let separator = find_subsequence(&response, b"\r\n\r\n").ok_or_else(|| {
+            ClientError::InvalidResponse("HTTP headers were incomplete".to_owned())
+        })?;
         if separator > MAX_HTTP_HEADER_BYTES {
             return Err(ClientError::InvalidResponse(
                 "HTTP response headers exceeded the client limit".to_owned(),
@@ -241,7 +242,9 @@ impl EventClient {
             .next()
             .and_then(|line| line.split_whitespace().nth(1))
             .and_then(|value| value.parse::<u16>().ok())
-            .ok_or_else(|| ClientError::InvalidResponse("HTTP status line was invalid".to_owned()))?;
+            .ok_or_else(|| {
+                ClientError::InvalidResponse("HTTP status line was invalid".to_owned())
+            })?;
         if !(200..300).contains(&status) {
             return Err(decode_remote_error(response_body, Some(status)));
         }
@@ -257,8 +260,9 @@ impl EventClient {
             .into_client_request()
             .map_err(|error| ClientError::InvalidEndpoint(error.to_string()))?;
         if let Some(token) = self.config.token.as_deref() {
-            let value = HeaderValue::from_str(&format!("Bearer {token}"))
-                .map_err(|_| ClientError::InvalidConfig("authentication token is not a valid header value"))?;
+            let value = HeaderValue::from_str(&format!("Bearer {token}")).map_err(|_| {
+                ClientError::InvalidConfig("authentication token is not a valid header value")
+            })?;
             request.headers_mut().insert(AUTHORIZATION, value);
         }
         let (mut socket, _) = timed(self.config.timeout, connect_async(request))
@@ -402,8 +406,8 @@ struct HttpEndpoint {
 }
 
 fn parse_http_endpoint(endpoint: &str) -> Result<HttpEndpoint, ClientError> {
-    let uri = Uri::from_str(endpoint)
-        .map_err(|error| ClientError::InvalidEndpoint(error.to_string()))?;
+    let uri =
+        Uri::from_str(endpoint).map_err(|error| ClientError::InvalidEndpoint(error.to_string()))?;
     if uri.scheme_str() != Some("http") {
         return Err(ClientError::InvalidEndpoint(
             "embedded HTTP client currently requires http://; use a local TLS terminator for https://"
@@ -482,7 +486,9 @@ fn decode_ack(bytes: &[u8]) -> Result<IngestAck, ClientError> {
         Err(error) => match serde_json::from_slice::<RemoteError>(bytes) {
             Ok(remote) => Err(ClientError::RemoteRejected {
                 code: remote.error,
-                message: remote.message.unwrap_or_else(|| "request rejected".to_owned()),
+                message: remote
+                    .message
+                    .unwrap_or_else(|| "request rejected".to_owned()),
             }),
             Err(_) => Err(ClientError::InvalidResponse(error.to_string())),
         },
@@ -493,7 +499,9 @@ fn decode_remote_error(bytes: &[u8], status: Option<u16>) -> ClientError {
     if let Ok(remote) = serde_json::from_slice::<RemoteError>(bytes) {
         ClientError::RemoteRejected {
             code: remote.error,
-            message: remote.message.unwrap_or_else(|| "request rejected".to_owned()),
+            message: remote
+                .message
+                .unwrap_or_else(|| "request rejected".to_owned()),
         }
     } else if let Some(status) = status {
         ClientError::HttpStatus(status)
@@ -569,8 +577,8 @@ mod tests {
 
     #[test]
     fn parses_http_endpoints_without_putting_credentials_in_urls() {
-        let endpoint = parse_http_endpoint("http://127.0.0.1:8787/api/v1/events?batch=false")
-            .unwrap();
+        let endpoint =
+            parse_http_endpoint("http://127.0.0.1:8787/api/v1/events?batch=false").unwrap();
         assert_eq!(endpoint.connect_address, "127.0.0.1:8787");
         assert_eq!(endpoint.host_header, "127.0.0.1:8787");
         assert_eq!(endpoint.path, "/api/v1/events?batch=false");
