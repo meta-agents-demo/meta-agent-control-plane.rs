@@ -10,6 +10,8 @@ CI = ROOT / ".github/workflows/ci.yml"
 WORKFLOW_CONTRACT = ROOT / ".github/workflows/workflow-contract.yml"
 DEEP_CONFORMANCE = ROOT / ".github/workflows/deep-conformance.yml"
 DOCKERFILE = ROOT / "Dockerfile"
+MAKEFILE = ROOT / "Makefile"
+NETWORK_TEST = ROOT / "tests/network_transport_conformance.rs"
 LOCKFILE = ROOT / "Cargo.lock"
 PINNED_ACTION = re.compile(r"uses:\s+[^@\s]+@[0-9a-f]{40}(?:\s+#.*)?$")
 PINNED_ACTIONLINT_IMAGE = re.compile(r"rhysd/actionlint@sha256:[0-9a-f]{64}")
@@ -22,6 +24,8 @@ class WorkflowContractTests(unittest.TestCase):
         cls.contract = WORKFLOW_CONTRACT.read_text(encoding="utf-8")
         cls.deep = DEEP_CONFORMANCE.read_text(encoding="utf-8")
         cls.dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+        cls.makefile = MAKEFILE.read_text(encoding="utf-8")
+        cls.network_test = NETWORK_TEST.read_text(encoding="utf-8")
 
     def test_cargo_lock_is_committed_and_generation_is_not_hidden_in_ci(self) -> None:
         self.assertTrue(LOCKFILE.is_file())
@@ -88,6 +92,7 @@ class WorkflowContractTests(unittest.TestCase):
             "workflow_dispatch:",
             "for attempt in 1 2 3; do",
             "cargo test --locked --test replay_pressure_udp -- --nocapture --test-threads=1",
+            "cargo test --locked --test network_transport_conformance -- --nocapture --test-threads=1",
             "cargo fmt --all --check",
             "cargo clippy --workspace --all-targets --locked -- -D warnings",
             "RUST_BACKTRACE: '1'",
@@ -96,6 +101,24 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertIn(contract, self.deep)
         self.assertNotIn("secrets.", self.deep)
         self.assertNotIn("id-token: write", self.deep)
+
+    def test_actual_network_fixture_is_real_bounded_and_locally_reproducible(self) -> None:
+        self.assertTrue(NETWORK_TEST.is_file())
+        for contract in (
+            "Daemon::bind(config)",
+            "TcpStream::connect(address)",
+            "connect_async(request)",
+            'WebSocketError::Http(response) => assert_eq!(response.status().as_u16(), 401)',
+            "snapshot.counters.rejected, 3",
+            "actual_http_websocket_and_tcp_telemetry_produce_identical_projection",
+            "actual_http_websocket_and_tcp_privileged_events_produce_identical_projection",
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, self.network_test)
+        self.assertIn(
+            "cargo test --locked --test network_transport_conformance -- --nocapture --test-threads=1",
+            self.makefile,
+        )
 
     def test_workflow_contract_uses_actionlint_and_tests_itself(self) -> None:
         self.assertIn("docker run --rm", self.contract)

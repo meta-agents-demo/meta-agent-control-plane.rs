@@ -15,6 +15,7 @@ test:
 
 deep-test:
 	cargo test --locked --test replay_pressure_udp -- --nocapture --test-threads=1
+	cargo test --locked --test network_transport_conformance -- --nocapture --test-threads=1
 
 image:
 	docker build -t meta-agent-control-plane:local .
