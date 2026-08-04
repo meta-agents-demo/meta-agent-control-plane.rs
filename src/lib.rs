@@ -9,6 +9,7 @@ pub mod coordination_ui;
 pub mod daemon;
 pub mod explorer;
 pub mod explorer_api;
+pub mod explorer_ui;
 pub mod http;
 pub mod metacognition;
 pub mod metacognition_api;
