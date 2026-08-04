@@ -57,6 +57,35 @@ Candidates are ranked deterministically within each agent, then selected in fair
 
 The summary distinguishes candidates suppressed by assignment capacity from intervention or hold records omitted by their independent retention bounds. This makes a truncated plan observable without converting omitted work into implied authorization. Increase the appropriate bound and rebuild from the same snapshot when an operator needs the additional explanations.
 
+## Protected HTTP API
+
+The daemon exposes the current default plan at:
+
+```bash
+curl --fail-with-body \
+  -H 'authorization: Bearer replace-with-at-least-16-bytes' \
+  http://127.0.0.1:8787/api/v1/coordination
+```
+
+Operators may override one or more output bounds for a single authenticated read:
+
+```bash
+curl --fail-with-body \
+  -H 'authorization: Bearer replace-with-at-least-16-bytes' \
+  'http://127.0.0.1:8787/api/v1/coordination?max_assignments=8&max_assignments_per_agent=2&max_interventions=16&max_holds=32'
+```
+
+The server authenticates before parsing policy input. Parameters are strict base-10 integers, may appear only once, and have hard caps independent of the snapshot:
+
+| Parameter | Default | Server maximum |
+| --- | ---: | ---: |
+| `max_assignments` | 16 | 256 |
+| `max_assignments_per_agent` | 2 | 32 |
+| `max_interventions` | 32 | 512 |
+| `max_holds` | 64 | 1024 |
+
+Zero, overflow, duplicate parameters, unknown parameters, missing `=`, and non-integer values fail with a bounded `400 invalid_planning_policy` response. The response does not echo the retained snapshot or raw query string. Query parameters affect only the returned projection and do not change daemon configuration or future plans.
+
 ## Offline CLI
 
 Export a protected snapshot and build a plan without connecting the CLI to the daemon:
@@ -90,6 +119,7 @@ The planner CLI does not accept an authentication token, provider credential, pr
 - offline agents receive no assignments;
 - graph and terminal-state contradictions fail into interventions;
 - global and per-agent assignment bounds are mandatory and non-zero;
+- HTTP policy overrides are authenticated, duplicate-free, and server-capped;
 - source event IDs are bounded and deduplicated;
 - no hidden chain-of-thought is requested, reconstructed, or emitted.
 
@@ -105,4 +135,7 @@ Unit and integration tests exercise:
 - explicit blocker recovery;
 - deterministic repeated planning;
 - CLI stdin operation and bounded output;
-- fail-closed zero-capacity policy errors without snapshot echo.
+- fail-closed zero-capacity policy errors without snapshot echo;
+- auth-before-query parsing;
+- custom HTTP policy projection;
+- zero, excessive, duplicate, unknown, and non-integer HTTP policy rejection.
