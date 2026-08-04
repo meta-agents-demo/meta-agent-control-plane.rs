@@ -161,11 +161,7 @@ fn decode_chunked(body: &[u8]) -> Vec<u8> {
     output
 }
 
-async fn send_http(
-    address: SocketAddr,
-    token: &str,
-    event: &EventEnvelope,
-) -> (u16, Value) {
+async fn send_http(address: SocketAddr, token: &str, event: &EventEnvelope) -> (u16, Value) {
     let body = serde_json::to_vec(event).expect("serialize HTTP event");
     let request = format!(
         "POST /api/v1/events HTTP/1.1\r\nHost: {address}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -274,7 +270,8 @@ async fn project_event(transport: NetworkTransport, event: EventEnvelope) -> Val
     let harness = Harness::start().await;
     let response = match transport {
         NetworkTransport::Http => {
-            let (status, response) = send_http(harness.addresses.http, &harness.token, &event).await;
+            let (status, response) =
+                send_http(harness.addresses.http, &harness.token, &event).await;
             assert_eq!(status, 202);
             response
         }
