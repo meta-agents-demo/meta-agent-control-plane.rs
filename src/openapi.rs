@@ -26,7 +26,7 @@ pub fn document(
         "info": {
             "title": "Meta-Agent Control Plane API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "Provider-neutral telemetry for observable agent goals, tasks, progress, explicit reflection, and learned lessons. The protocol intentionally excludes hidden chain-of-thought."
+            "description": "Provider-neutral telemetry for observable agent goals, tasks, progress, explicit reflection, learned lessons, explainable metacognition, and bounded coordination recommendations. The protocol intentionally excludes hidden chain-of-thought."
         },
         "servers": [{ "url": "/", "description": "Same-origin daemon API" }],
         "paths": {
@@ -66,6 +66,42 @@ pub fn document(
                             "content": {
                                 "application/json": {
                                     "schema": { "$ref": "#/components/schemas/Snapshot" }
+                                }
+                            }
+                        },
+                        "401": { "description": "Read API authentication failed" }
+                    }
+                }
+            },
+            "/api/v1/metacognition": {
+                "get": {
+                    "summary": "Read the explainable metacognition projection",
+                    "description": "Returns deterministic progress, evidence, dependency, retry, stall, and consistency diagnostics derived only from retained observable state.",
+                    "security": read_security.clone(),
+                    "responses": {
+                        "200": {
+                            "description": "Explainable metacognition projection",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/MetacognitionSnapshot" }
+                                }
+                            }
+                        },
+                        "401": { "description": "Read API authentication failed" }
+                    }
+                }
+            },
+            "/api/v1/coordination": {
+                "get": {
+                    "summary": "Read the bounded deterministic coordination plan",
+                    "description": "Returns dependency-safe assignments, interventions, and held work for one snapshot revision. Assignments are recommendations, not leases, credentials, or execution authority.",
+                    "security": read_security.clone(),
+                    "responses": {
+                        "200": {
+                            "description": "Current coordination recommendation plan",
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/CoordinationPlan" }
                                 }
                             }
                         },
@@ -168,6 +204,50 @@ pub fn document(
                 "Snapshot": {
                     "type": "object",
                     "description": "Bounded LRU projection containing agents, goals, tasks, lessons, recent events, an independent idempotency window, counters, and cache pressure."
+                },
+                "MetacognitionSnapshot": {
+                    "type": "object",
+                    "description": "Deterministic, explainable diagnostic projection derived from one retained snapshot. Every diagnostic is tied to public rules and bounded visible source event IDs when retained."
+                },
+                "CoordinationPlan": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Bounded deterministic recommendations for one snapshot revision. The plan never mutates state or grants execution authority.",
+                    "required": [
+                        "generated_at",
+                        "revision",
+                        "planning_policy",
+                        "analysis_policy",
+                        "summary",
+                        "assignments",
+                        "interventions",
+                        "held_tasks"
+                    ],
+                    "properties": {
+                        "generated_at": { "type": "string", "format": "date-time" },
+                        "revision": { "type": "integer", "minimum": 0 },
+                        "planning_policy": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                                "max_assignments",
+                                "max_assignments_per_agent",
+                                "max_interventions",
+                                "max_holds"
+                            ],
+                            "properties": {
+                                "max_assignments": { "type": "integer", "minimum": 1 },
+                                "max_assignments_per_agent": { "type": "integer", "minimum": 1 },
+                                "max_interventions": { "type": "integer", "minimum": 1 },
+                                "max_holds": { "type": "integer", "minimum": 1 }
+                            }
+                        },
+                        "analysis_policy": { "type": "object" },
+                        "summary": { "type": "object" },
+                        "assignments": { "type": "array", "items": { "type": "object" } },
+                        "interventions": { "type": "array", "items": { "type": "object" } },
+                        "held_tasks": { "type": "array", "items": { "type": "object" } }
+                    }
                 }
             }
         },
@@ -195,7 +275,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn publishes_all_protocol_event_kinds() {
+    fn publishes_all_protocol_event_kinds_and_protected_read_projections() {
         let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8787);
         let document = document(
             BoundAddresses {
@@ -216,7 +296,23 @@ mod tests {
         );
         assert_eq!(document["servers"][0]["url"], "/");
         assert!(document["paths"]["/metrics"]["get"]["security"].is_array());
+        assert_eq!(
+            document["paths"]["/api/v1/metacognition"]["get"]["responses"]["200"]
+                ["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/MetacognitionSnapshot"
+        );
+        assert_eq!(
+            document["paths"]["/api/v1/coordination"]["get"]["responses"]["200"]
+                ["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/CoordinationPlan"
+        );
+        assert_eq!(
+            document["components"]["schemas"]["CoordinationPlan"]["properties"]
+                ["planning_policy"]["properties"]["max_assignments"]["minimum"],
+            1
+        );
     }
+
     #[test]
     fn checked_in_openapi_tracks_runtime_protocol_extensions() {
         let checked_in: Value = serde_json::from_str(include_str!("../docs/openapi.json"))
@@ -247,6 +343,12 @@ mod tests {
             runtime["paths"]
                 .as_object()
                 .map(|paths| paths.keys().collect::<Vec<_>>())
+        );
+        assert_eq!(
+            checked_in["paths"]["/api/v1/coordination"]["get"]["responses"]["200"]
+                ["content"]["application/json"]["schema"]["$ref"],
+            runtime["paths"]["/api/v1/coordination"]["get"]["responses"]["200"]
+                ["content"]["application/json"]["schema"]["$ref"]
         );
     }
 }
