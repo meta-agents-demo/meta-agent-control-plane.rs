@@ -8,13 +8,7 @@ use serde_json::Value;
 fn run_sidecar(provider: &str, input: &str) -> std::process::Output {
     let binary = env!("CARGO_BIN_EXE_meta-agent-sidecar");
     let mut child = Command::new(binary)
-        .args([
-            "--provider",
-            provider,
-            "--transport",
-            "http",
-            "--dry-run",
-        ])
+        .args(["--provider", provider, "--transport", "http", "--dry-run"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
