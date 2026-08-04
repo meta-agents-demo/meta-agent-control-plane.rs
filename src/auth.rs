@@ -99,6 +99,8 @@ pub fn preferred_token<'a>(
 
 #[cfg(test)]
 mod tests {
+    use axum::http::HeaderValue;
+
     use super::*;
 
     #[test]
@@ -137,14 +139,26 @@ mod tests {
             Some("header-token")
         );
 
-        headers.insert(AUTHORIZATION, "Basic ignored".parse().unwrap());
-        assert_eq!(preferred_token(&headers, Some("query-token")), None);
+        for malformed in ["Basic ignored", "Bearer", "Bearer token extra"] {
+            headers.insert(AUTHORIZATION, malformed.parse().unwrap());
+            assert_eq!(
+                preferred_token(&headers, Some("query-token")),
+                None,
+                "malformed authorization header fell back for {malformed:?}"
+            );
+        }
+    }
 
-        headers.remove(AUTHORIZATION);
+    #[test]
+    fn query_credentials_are_considered_only_without_an_authorization_header() {
+        let mut headers = HeaderMap::new();
         assert_eq!(
             preferred_token(&headers, Some("query-token")),
             Some("query-token")
         );
+
+        headers.insert(AUTHORIZATION, HeaderValue::from_static(""));
+        assert_eq!(preferred_token(&headers, Some("query-token")), None);
     }
 
     #[test]
