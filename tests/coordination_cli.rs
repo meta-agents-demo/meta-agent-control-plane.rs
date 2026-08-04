@@ -46,12 +46,7 @@ async fn snapshot_json() -> String {
 async fn cli_reads_snapshot_from_stdin_and_emits_a_bounded_plan() {
     let input = snapshot_json().await;
     let mut child = Command::new(binary())
-        .args([
-            "--max-assignments",
-            "1",
-            "--max-assignments-per-agent",
-            "1",
-        ])
+        .args(["--max-assignments", "1", "--max-assignments-per-agent", "1"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

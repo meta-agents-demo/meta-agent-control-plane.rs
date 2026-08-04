@@ -241,12 +241,7 @@ fn plan_from_analysis(
     let task_lookup = snapshot
         .tasks
         .iter()
-        .map(|task| {
-            (
-                (task.agent_id.clone(), task.task.task_id.clone()),
-                task,
-            )
-        })
+        .map(|task| ((task.agent_id.clone(), task.task.task_id.clone()), task))
         .collect::<BTreeMap<_, _>>();
     let agent_statuses = snapshot
         .agents
@@ -327,17 +322,20 @@ fn plan_from_analysis(
         planning_policy.max_assignments_per_agent,
     );
     let suppressed_count = suppressed.len();
-    held_tasks.extend(suppressed.into_iter().map(|assignment| HeldTask {
-        agent_id: assignment.agent_id,
-        task_id: assignment.task_id,
-        goal_id: assignment.goal_id,
-        reason: HoldReason::AssignmentLimit,
-        explanation: "A higher-priority fair-share assignment consumed the configured planning capacity."
-            .to_owned(),
-        unresolved_dependencies: Vec::new(),
-        diagnostic_ids: assignment.diagnostic_ids,
-        source_event_ids: assignment.source_event_ids,
-        source_events_retained: assignment.source_events_retained,
+    held_tasks.extend(suppressed.into_iter().map(|assignment| {
+        HeldTask {
+            agent_id: assignment.agent_id,
+            task_id: assignment.task_id,
+            goal_id: assignment.goal_id,
+            reason: HoldReason::AssignmentLimit,
+            explanation:
+                "A higher-priority fair-share assignment consumed the configured planning capacity."
+                    .to_owned(),
+            unresolved_dependencies: Vec::new(),
+            diagnostic_ids: assignment.diagnostic_ids,
+            source_event_ids: assignment.source_event_ids,
+            source_events_retained: assignment.source_events_retained,
+        }
     }));
     held_tasks.sort_by(hold_order);
 
@@ -438,10 +436,7 @@ fn intervention_for(task: &TaskAnalysis, diagnostics: &[&Diagnostic]) -> Option<
     })
 }
 
-fn assignment_action(
-    task: &TaskAnalysis,
-    diagnostics: &[&Diagnostic],
-) -> Option<AssignmentAction> {
+fn assignment_action(task: &TaskAnalysis, diagnostics: &[&Diagnostic]) -> Option<AssignmentAction> {
     if has_rule(diagnostics, DiagnosticRule::RetryLoop) {
         Some(AssignmentAction::ChangeStrategy)
     } else if has_rule(diagnostics, DiagnosticRule::StalledTask) {
@@ -735,12 +730,7 @@ mod tests {
         Store::new(config.cache_config(), config.update_channel_capacity)
     }
 
-    async fn create_task(
-        store: &Store,
-        agent_id: &str,
-        task_id: &str,
-        dependencies: Vec<&str>,
-    ) {
+    async fn create_task(store: &Store, agent_id: &str, task_id: &str, dependencies: Vec<&str>) {
         store
             .ingest(
                 EventEnvelope::new(
@@ -772,8 +762,9 @@ mod tests {
                 .iter()
                 .any(|assignment| assignment.task_id == "prerequisite")
         );
-        assert!(!
-            plan.assignments
+        assert!(
+            !plan
+                .assignments
                 .iter()
                 .any(|assignment| assignment.task_id == "dependent")
         );
@@ -791,9 +782,11 @@ mod tests {
         let plan = build_plan(&store.snapshot().await).unwrap();
         assert!(plan.assignments.is_empty());
         assert_eq!(plan.interventions.len(), 2);
-        assert!(plan.interventions.iter().all(|intervention| {
-            intervention.kind == InterventionKind::RepairDependencyGraph
-        }));
+        assert!(
+            plan.interventions.iter().all(|intervention| {
+                intervention.kind == InterventionKind::RepairDependencyGraph
+            })
+        );
     }
 
     #[tokio::test]
@@ -836,7 +829,6 @@ mod tests {
                 plan_summary: Some("Repeat the same plan".to_owned()),
             }),
         );
-        started.occurred_at -= Duration::minutes(30);
         store.ingest(started, Transport::Http).await.unwrap();
         let mut snapshot = store.snapshot().await;
         snapshot.generated_at += Duration::minutes(30);
@@ -849,7 +841,10 @@ mod tests {
         let first = build_plan_with_policy(&snapshot, policy, PlanningPolicy::default()).unwrap();
         let second = build_plan_with_policy(&snapshot, policy, PlanningPolicy::default()).unwrap();
         assert_eq!(first, second);
-        assert_eq!(first.assignments[0].action, AssignmentAction::ChangeStrategy);
+        assert_eq!(
+            first.assignments[0].action,
+            AssignmentAction::ChangeStrategy
+        );
     }
 
     #[tokio::test]
