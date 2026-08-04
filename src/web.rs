@@ -5,14 +5,15 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     coordination_api, explorer_api,
     http::{self, AppState},
-    metacognition_api,
+    metacognition_api, timeline_api,
 };
 
 pub fn router(state: AppState) -> Router {
     http::router(state.clone())
         .merge(metacognition_api::router(state.clone()))
         .merge(coordination_api::router(state.clone()))
-        .merge(explorer_api::router(state))
+        .merge(explorer_api::router(state.clone()))
+        .merge(timeline_api::router(state))
 }
 
 pub async fn serve(
@@ -66,7 +67,11 @@ mod tests {
             assert_eq!(response.status(), StatusCode::OK, "path {path}");
         }
 
-        for path in ["/api/v1/coordination", "/api/v1/explorer"] {
+        for path in [
+            "/api/v1/coordination",
+            "/api/v1/explorer",
+            "/api/v1/timeline",
+        ] {
             let response = app
                 .clone()
                 .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
