@@ -2,10 +2,10 @@ use chrono::{DateTime, Duration, Utc};
 
 use meta_agent_control_plane::{
     Config,
-    metacognition::{analyze, analyze_with_policy, AnalysisPolicy, DiagnosticRule},
+    metacognition::{AnalysisPolicy, DiagnosticRule, analyze, analyze_with_policy},
     model::{
-        AgentEvent, AgentRef, EvidenceReference, EventEnvelope, Goal, ProgressUpdate,
-        Reflection, TaskSpec, TaskStarted, Transport,
+        AgentEvent, AgentRef, EventEnvelope, EvidenceReference, Goal, ProgressUpdate, Reflection,
+        TaskSpec, TaskStarted, Transport,
     },
     store::Store,
 };
@@ -63,7 +63,11 @@ async fn repeated_blocked_attempt_is_explainable_and_deterministic() {
         }),
         now - Duration::minutes(30),
     );
-    let source_ids = [task_created.event_id, task_started.event_id, progress.event_id];
+    let source_ids = [
+        task_created.event_id,
+        task_started.event_id,
+        progress.event_id,
+    ];
 
     for event in [task_created, task_started, progress] {
         store.ingest(event, Transport::Http).await.unwrap();
@@ -81,20 +85,29 @@ async fn repeated_blocked_attempt_is_explainable_and_deterministic() {
     assert_eq!(first, second);
     assert!(first.diagnostics.iter().any(|diagnostic| {
         diagnostic.rule == DiagnosticRule::StalledTask
-            && diagnostic.source_event_ids.iter().any(|id| source_ids.contains(id))
+            && diagnostic
+                .source_event_ids
+                .iter()
+                .any(|id| source_ids.contains(id))
     }));
-    assert!(first
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.rule == DiagnosticRule::RetryLoop));
-    assert!(first
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.rule == DiagnosticRule::MissingEvidence));
-    assert!(first
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.rule == DiagnosticRule::MissingNextAction));
+    assert!(
+        first
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.rule == DiagnosticRule::RetryLoop)
+    );
+    assert!(
+        first
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.rule == DiagnosticRule::MissingEvidence)
+    );
+    assert!(
+        first
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.rule == DiagnosticRule::MissingNextAction)
+    );
 }
 
 #[tokio::test]
