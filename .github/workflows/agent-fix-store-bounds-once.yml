@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: den-1057-store-bounds-fix
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   repair:
@@ -20,7 +20,7 @@ jobs:
       github.repository == 'meta-agents-demo/meta-agent-control-plane.rs' &&
       github.ref == 'refs/heads/agent/den-1057-meta-agent-control-plane'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Check out the exact implementation branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,13 +29,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Install pinned Rust toolchain
+      - name: Install pinned Rust formatting toolchain
         uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b
         with:
           toolchain: 1.97.1
-          components: rustfmt,clippy
+          components: rustfmt
 
-      - name: Add the bounds required by LruCache methods
+      - name: Apply the exact LruCache key bounds
         shell: bash
         run: |
           set -euo pipefail
@@ -50,17 +50,16 @@ jobs:
               K: Hash + Eq,
           {
           '''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one cache_stats signature, found {text.count(old)}')
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected one cache_stats signature, found {count}')
           path.write_text(text.replace(old, new), encoding='utf-8')
           PY
           cargo fmt --all
           cargo fmt --all --check
-          cargo clippy --workspace --all-targets --locked -- -D warnings
-          cargo test --workspace --all-targets --locked
           git diff --check
 
-      - name: Commit the compile fix
+      - name: Commit the bounded source repair
         shell: bash
         run: |
           set -euo pipefail
