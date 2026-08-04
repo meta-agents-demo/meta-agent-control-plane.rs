@@ -1,0 +1,68 @@
+name: Repair coordination planner Clippy once
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+    paths:
+      - .github/workflows/repair-coordination-clippy-once.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-coordination-planner-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'agent/den-1064-planner-ci-repair-v3'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact feature head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply exact Clippy repair and remove this workflow
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/coordination.rs')
+          text = path.read_text(encoding='utf-8')
+          old = """fn diagnostics_by_task<'a>(
+              diagnostics: &'a [Diagnostic],
+          ) -> BTreeMap<TaskKey, Vec<&'a Diagnostic>> {
+          """
+          new = """fn diagnostics_by_task(
+              diagnostics: &[Diagnostic],
+          ) -> BTreeMap<TaskKey, Vec<&Diagnostic>> {
+          """
+          if text.count(old) != 1:
+              raise SystemExit('expected exactly one needless-lifetime signature')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          rm .github/workflows/repair-coordination-clippy-once.yml
+          test "$(git diff --name-only | LC_ALL=C sort | tr '\n' ' ')" = ".github/workflows/repair-coordination-clippy-once.yml src/coordination.rs "
+          git diff --check
+          grep -F "fn diagnostics_by_task(" src/coordination.rs >/dev/null
+          if grep -F "diagnostics_by_task<'a>" src/coordination.rs; then
+            echo 'needless lifetime remains' >&2
+            exit 1
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/coordination.rs .github/workflows/repair-coordination-clippy-once.yml
+          git commit -m 'fix(DEN-1064): elide planner diagnostic lifetime'
+          git push origin "HEAD:${HEAD_BRANCH}"
