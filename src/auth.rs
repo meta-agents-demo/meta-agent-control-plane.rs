@@ -1,6 +1,6 @@
 use std::{fmt, sync::Arc};
 
-use axum::http::{header::AUTHORIZATION, HeaderMap};
+use axum::http::{HeaderMap, header::AUTHORIZATION};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
@@ -86,7 +86,10 @@ pub fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     }
 }
 
-pub fn preferred_token<'a>(headers: &'a HeaderMap, query_token: Option<&'a str>) -> Option<&'a str> {
+pub fn preferred_token<'a>(
+    headers: &'a HeaderMap,
+    query_token: Option<&'a str>,
+) -> Option<&'a str> {
     bearer_token(headers).or(query_token)
 }
 
