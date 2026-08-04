@@ -44,67 +44,34 @@ jobs:
 
           path = Path('src/store.rs')
           text = path.read_text(encoding='utf-8')
-          replacements = [
+
+          prefix = "            if applied {\n                if let Some(agent) = inner.agents.get_mut(&agent_id) {\n"
+          collapsed = "            if applied && let Some(agent) = inner.agents.get_mut(&agent_id) {\n"
+          count = text.count(prefix)
+          if count != 3:
+              raise SystemExit(f'expected three nested lifecycle prefixes, found {count}')
+          text = text.replace(prefix, collapsed)
+
+          tails = [
               (
-                  '''            if applied {
-                      if let Some(agent) = inner.agents.get_mut(&agent_id) {
-                          remove_completion_counter(agent, previous_outcome);
-                          agent.status = AgentStatus::Running;
-                          agent.active_task_id = Some(started.task_id.clone());
-                      }
-                  }
-          ''',
-                  '''            if applied && let Some(agent) = inner.agents.get_mut(&agent_id) {
-                      remove_completion_counter(agent, previous_outcome);
-                      agent.status = AgentStatus::Running;
-                      agent.active_task_id = Some(started.task_id.clone());
-                  }
-          ''',
+                  "                    agent.active_task_id = Some(started.task_id.clone());\n                }\n            }\n",
+                  "                agent.active_task_id = Some(started.task_id.clone());\n            }\n",
               ),
               (
-                  '''            if applied {
-                      if let Some(agent) = inner.agents.get_mut(&agent_id) {
-                          remove_completion_counter(agent, previous_outcome);
-                          agent.status = if progress.blocker.is_some() {
-                              AgentStatus::Blocked
-                          } else {
-                              AgentStatus::Running
-                          };
-                          agent.active_task_id = Some(progress.task_id.clone());
-                      }
-                  }
-          ''',
-                  '''            if applied && let Some(agent) = inner.agents.get_mut(&agent_id) {
-                      remove_completion_counter(agent, previous_outcome);
-                      agent.status = if progress.blocker.is_some() {
-                          AgentStatus::Blocked
-                      } else {
-                          AgentStatus::Running
-                      };
-                      agent.active_task_id = Some(progress.task_id.clone());
-                  }
-          ''',
+                  "                    agent.active_task_id = Some(progress.task_id.clone());\n                }\n            }\n",
+                  "                agent.active_task_id = Some(progress.task_id.clone());\n            }\n",
               ),
               (
-                  '''            if applied {
-                      if let Some(agent) = inner.agents.get_mut(&agent_id) {
-                          agent.active_task_id = None;
-                          reconcile_completion_counters(agent, previous_outcome, completed.outcome);
-                      }
-                  }
-          ''',
-                  '''            if applied && let Some(agent) = inner.agents.get_mut(&agent_id) {
-                      agent.active_task_id = None;
-                      reconcile_completion_counters(agent, previous_outcome, completed.outcome);
-                  }
-          ''',
+                  "                    reconcile_completion_counters(agent, previous_outcome, completed.outcome);\n                }\n            }\n",
+                  "                reconcile_completion_counters(agent, previous_outcome, completed.outcome);\n            }\n",
               ),
           ]
-          for old, new in replacements:
+          for old, new in tails:
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f'expected one lifecycle block, found {count}')
+                  raise SystemExit(f'expected one lifecycle tail, found {count}')
               text = text.replace(old, new)
+
           path.write_text(text, encoding='utf-8')
           PY
           cargo fmt --all
