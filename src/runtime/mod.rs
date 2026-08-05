@@ -58,11 +58,8 @@ impl RuntimeConfig {
         } else {
             process_patterns
         };
-        let hook_capacity = env_usize(
-            "META_AGENT_RUNTIME_HOOK_CAPACITY",
-            DEFAULT_HOOK_CAPACITY,
-        )
-        .clamp(1, MAX_HOOK_CAPACITY);
+        let hook_capacity = env_usize("META_AGENT_RUNTIME_HOOK_CAPACITY", DEFAULT_HOOK_CAPACITY)
+            .clamp(1, MAX_HOOK_CAPACITY);
         let command_capacity = env_usize(
             "META_AGENT_RUNTIME_COMMAND_CAPACITY",
             DEFAULT_COMMAND_CAPACITY,
