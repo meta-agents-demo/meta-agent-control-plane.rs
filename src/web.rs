@@ -5,15 +5,22 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     coordination_api, explorer_api,
     http::{self, AppState},
-    metacognition_api, timeline_api,
+    metacognition_api,
+    runtime::RuntimeMonitor,
+    runtime_api, timeline_api,
 };
 
 pub fn router(state: AppState) -> Router {
+    router_with_runtime(state, RuntimeMonitor::from_env())
+}
+
+fn router_with_runtime(state: AppState, runtime: RuntimeMonitor) -> Router {
     http::router(state.clone())
         .merge(metacognition_api::router(state.clone()))
         .merge(coordination_api::router(state.clone()))
         .merge(explorer_api::router(state.clone()))
-        .merge(timeline_api::router(state))
+        .merge(timeline_api::router(state.clone()))
+        .merge(runtime_api::router(state, runtime))
 }
 
 pub async fn serve(
@@ -21,9 +28,19 @@ pub async fn serve(
     state: AppState,
     cancellation: CancellationToken,
 ) -> std::io::Result<()> {
-    axum::serve(listener, router(state))
-        .with_graceful_shutdown(cancellation.cancelled_owned())
-        .await
+    let runtime = RuntimeMonitor::from_env();
+    let app = router_with_runtime(state, runtime.clone());
+    let server_cancellation = cancellation.child_token();
+    let collector_cancellation = cancellation.child_token();
+    let server = axum::serve(listener, app)
+        .with_graceful_shutdown(server_cancellation.cancelled_owned());
+    let collector = async move {
+        runtime.run(collector_cancellation).await;
+        Ok::<(), std::io::Error>(())
+    };
+
+    tokio::try_join!(server, collector)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -58,7 +75,13 @@ mod tests {
     #[tokio::test]
     async fn combined_router_serves_operator_pages_and_protects_read_apis() {
         let app = router(test_state());
-        for path in ["/", "/metacognition", "/coordination", "/explorer"] {
+        for path in [
+            "/",
+            "/metacognition",
+            "/coordination",
+            "/explorer",
+            "/runtime",
+        ] {
             let response = app
                 .clone()
                 .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
@@ -71,6 +94,7 @@ mod tests {
             "/api/v1/coordination",
             "/api/v1/explorer",
             "/api/v1/timeline",
+            "/api/v1/runtime/snapshot",
         ] {
             let response = app
                 .clone()
