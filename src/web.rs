@@ -32,8 +32,8 @@ pub async fn serve(
     let app = router_with_runtime(state, runtime.clone());
     let server_cancellation = cancellation.child_token();
     let collector_cancellation = cancellation.child_token();
-    let server = axum::serve(listener, app)
-        .with_graceful_shutdown(server_cancellation.cancelled_owned());
+    let server =
+        axum::serve(listener, app).with_graceful_shutdown(server_cancellation.cancelled_owned());
     let collector = async move {
         runtime.run(collector_cancellation).await;
         Ok::<(), std::io::Error>(())
