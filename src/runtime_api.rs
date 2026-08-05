@@ -51,7 +51,7 @@ impl IntoResponse for ApiError {
                 StatusCode::CONFLICT,
                 Json(json!({
                     "error": "runtime_agent_not_hook_backed",
-                    "message": "Agent has no cooperative runtime hook channel"
+                    "message": "Agent has no cooperative control channel"
                 })),
             )
                 .into_response(),
@@ -305,6 +305,7 @@ mod tests {
             session_id: Some("session-1".to_owned()),
             pid: None,
             kind: RuntimeHookKind::ModelResponse,
+            control_capable: true,
             summary: Some("Visible response summary".to_owned()),
             tool_name: None,
             confidence: Some(0.8),
@@ -381,6 +382,7 @@ mod tests {
         assert_eq!(snapshot.agents[0].reported_confidence, Some(0.8));
         assert_eq!(snapshot.agents[0].cpu_percent, Some(18.5));
         assert_eq!(snapshot.agents[0].resource_source, "hook");
+        assert!(snapshot.agents[0].control_capable);
         assert_eq!(snapshot.agents[0].input_tokens, 20);
     }
 
@@ -402,7 +404,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dashboard_controls_queue_commands_for_hook_aware_agents() {
+    async fn dashboard_controls_queue_commands_for_control_capable_agents() {
         let runtime = test_runtime();
         let app = router(test_state(), runtime);
         let event = hook();
