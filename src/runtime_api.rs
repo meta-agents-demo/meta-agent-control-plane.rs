@@ -162,8 +162,8 @@ async fn set_collection(
     payload: Result<Json<CollectionControl>, JsonRejection>,
 ) -> Result<Json<CollectionControlResponse>, ApiError> {
     authorize_ingest(&state, &headers)?;
-    let Json(control) = payload
-        .map_err(|_| ApiError::BadRequest("Invalid collection control JSON"))?;
+    let Json(control) =
+        payload.map_err(|_| ApiError::BadRequest("Invalid collection control JSON"))?;
     runtime.set_collection_enabled(control.enabled);
     Ok(Json(CollectionControlResponse {
         enabled: runtime.collection_enabled(),
@@ -177,14 +177,12 @@ async fn enqueue_command(
     payload: Result<Json<ControlCommandRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<ControlCommand>), ApiError> {
     authorize_ingest(&state, &headers)?;
-    let Json(request) = payload
-        .map_err(|_| ApiError::BadRequest("Invalid control command JSON"))?;
+    let Json(request) =
+        payload.map_err(|_| ApiError::BadRequest("Invalid control command JSON"))?;
     match runtime.enqueue_command(request).await {
         Ok(command) => Ok((StatusCode::ACCEPTED, Json(command))),
         Err(RuntimeError::AgentNotHookBacked) => Err(ApiError::AgentNotHookBacked),
-        Err(_) => Err(ApiError::BadRequest(
-            "Control command failed validation",
-        )),
+        Err(_) => Err(ApiError::BadRequest("Control command failed validation")),
     }
 }
 
@@ -195,8 +193,7 @@ async fn pending_commands(
     payload: Result<Json<CommandPollRequest>, JsonRejection>,
 ) -> Result<Json<Vec<ControlCommand>>, ApiError> {
     authorize_ingest(&state, &headers)?;
-    let Json(request) = payload
-        .map_err(|_| ApiError::BadRequest("Invalid command poll JSON"))?;
+    let Json(request) = payload.map_err(|_| ApiError::BadRequest("Invalid command poll JSON"))?;
     runtime
         .pending_commands(&request.agent_id)
         .await
@@ -211,8 +208,8 @@ async fn acknowledge_command(
     payload: Result<Json<ControlCommandAck>, JsonRejection>,
 ) -> Result<Json<ControlCommand>, ApiError> {
     authorize_ingest(&state, &headers)?;
-    let Json(ack) = payload
-        .map_err(|_| ApiError::BadRequest("Invalid command acknowledgement JSON"))?;
+    let Json(ack) =
+        payload.map_err(|_| ApiError::BadRequest("Invalid command acknowledgement JSON"))?;
     match runtime.acknowledge_command(ack).await {
         Ok(command) => Ok(Json(command)),
         Err(RuntimeError::CommandNotFound) => Err(ApiError::NotFound),
@@ -252,9 +249,7 @@ mod tests {
         auth::AuthPolicy,
         config::Config,
         daemon::BoundAddresses,
-        runtime::{
-            RUNTIME_PROTOCOL_VERSION, RuntimeAgentRef, RuntimeConfig, RuntimeHookKind,
-        },
+        runtime::{RUNTIME_PROTOCOL_VERSION, RuntimeAgentRef, RuntimeConfig, RuntimeHookKind},
         store::Store,
     };
 
