@@ -157,20 +157,14 @@ async fn rejects_hidden_reasoning_metadata_and_duplicate_hooks() {
     invalid
         .metadata
         .insert("chain_of_thought".to_owned(), "private".to_owned());
-    assert_eq!(
-        invalid.validate(),
-        Err(RuntimeError::ForbiddenMetadataKey)
-    );
+    assert_eq!(invalid.validate(), Err(RuntimeError::ForbiddenMetadataKey));
 
     let mut secret = hook(Uuid::new_v4(), RuntimeHookKind::Activity);
     secret.metadata.insert(
         "provider_api_token".to_owned(),
         "must-not-cross-boundary".to_owned(),
     );
-    assert_eq!(
-        secret.validate(),
-        Err(RuntimeError::ForbiddenMetadataKey)
-    );
+    assert_eq!(secret.validate(), Err(RuntimeError::ForbiddenMetadataKey));
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -205,7 +199,10 @@ async fn queues_and_acknowledges_hook_driven_controls() {
         })
         .await
         .unwrap();
-    assert_eq!(monitor.pending_commands("claude-test").await.unwrap().len(), 1);
+    assert_eq!(
+        monitor.pending_commands("claude-test").await.unwrap().len(),
+        1
+    );
 
     assert_eq!(
         monitor
@@ -229,6 +226,12 @@ async fn queues_and_acknowledges_hook_driven_controls() {
         .await
         .unwrap();
     assert_eq!(acknowledged.status, ControlStatus::Acknowledged);
-    assert!(monitor.pending_commands("claude-test").await.unwrap().is_empty());
+    assert!(
+        monitor
+            .pending_commands("claude-test")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     fs::remove_dir_all(root).unwrap();
 }
