@@ -66,6 +66,8 @@ pub struct RuntimeHookEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
     pub kind: RuntimeHookKind,
+    #[serde(default)]
+    pub control_capable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -272,6 +274,7 @@ pub struct RuntimeAgentTelemetry {
     pub output_tokens: u64,
     pub process_backed: bool,
     pub hook_backed: bool,
+    pub control_capable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_hook_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
