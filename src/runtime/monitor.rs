@@ -118,9 +118,10 @@ impl RuntimeMonitor {
         match result {
             Ok(Ok(snapshot)) => self.apply_proc_snapshot(snapshot).await,
             Ok(Err(error)) => self.record_collection_error(error).await,
-            Err(error) => self
-                .record_collection_error(format!("runtime collector task failed: {error}"))
-                .await,
+            Err(error) => {
+                self.record_collection_error(format!("runtime collector task failed: {error}"))
+                    .await
+            }
         }
     }
 
