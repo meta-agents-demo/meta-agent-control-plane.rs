@@ -57,6 +57,9 @@ struct HookAgentState {
     current_activity: Option<String>,
     current_tool: Option<String>,
     reported_confidence: Option<f32>,
+    cpu_percent: Option<f64>,
+    rss_bytes: Option<u64>,
+    memory_percent: Option<f64>,
     input_tokens: u64,
     output_tokens: u64,
     last_hook_at: DateTime<Utc>,
@@ -200,6 +203,9 @@ impl RuntimeMonitor {
                 current_activity: None,
                 current_tool: None,
                 reported_confidence: None,
+                cpu_percent: hook.cpu_percent,
+                rss_bytes: hook.rss_bytes,
+                memory_percent: hook.memory_percent,
                 input_tokens: 0,
                 output_tokens: 0,
                 last_hook_at: hook.occurred_at,
@@ -218,6 +224,15 @@ impl RuntimeMonitor {
             agent.last_hook_at = hook.occurred_at;
             if hook.confidence.is_some() {
                 agent.reported_confidence = hook.confidence;
+            }
+            if hook.cpu_percent.is_some() {
+                agent.cpu_percent = hook.cpu_percent;
+            }
+            if hook.rss_bytes.is_some() {
+                agent.rss_bytes = hook.rss_bytes;
+            }
+            if hook.memory_percent.is_some() {
+                agent.memory_percent = hook.memory_percent;
             }
             if hook.summary.is_some() {
                 agent.current_activity = hook.summary.clone();
@@ -353,6 +368,7 @@ impl RuntimeMonitor {
                     cpu_percent: process.cpu_percent,
                     rss_bytes: Some(process.rss_bytes),
                     memory_percent: process.memory_percent,
+                    resource_source: "host_process".to_owned(),
                     input_tokens: 0,
                     output_tokens: 0,
                     process_backed: true,
@@ -387,31 +403,49 @@ impl RuntimeMonitor {
                     agent.hook_backed = true;
                     agent.last_hook_at = Some(hook_agent.last_hook_at);
                 })
-                .or_insert_with(|| RuntimeAgentTelemetry {
-                    agent_id: hook_agent.agent.agent_id.clone(),
-                    provider: hook_agent.agent.provider.clone(),
-                    model: hook_agent.agent.model.clone(),
-                    instance_id: hook_agent.agent.instance_id.clone(),
-                    session_id: hook_agent.session_id.clone(),
-                    pid: hook_agent.pid,
-                    status: hook_agent.status.clone(),
-                    current_activity: hook_agent.current_activity.clone(),
-                    current_tool: hook_agent.current_tool.clone(),
-                    reported_confidence: hook_agent.reported_confidence,
-                    confidence_source: if hook_agent.reported_confidence.is_some() {
-                        "hook".to_owned()
-                    } else {
-                        "unreported".to_owned()
-                    },
-                    cpu_percent: process.and_then(|value| value.cpu_percent),
-                    rss_bytes: process.map(|value| value.rss_bytes),
-                    memory_percent: process.and_then(|value| value.memory_percent),
-                    input_tokens: hook_agent.input_tokens,
-                    output_tokens: hook_agent.output_tokens,
-                    process_backed: process.is_some(),
-                    hook_backed: true,
-                    last_hook_at: Some(hook_agent.last_hook_at),
-                    last_process_sample_at: process.map(|value| value.observed_at),
+                .or_insert_with(|| {
+                    let hook_has_resource = hook_agent.cpu_percent.is_some()
+                        || hook_agent.rss_bytes.is_some()
+                        || hook_agent.memory_percent.is_some();
+                    RuntimeAgentTelemetry {
+                        agent_id: hook_agent.agent.agent_id.clone(),
+                        provider: hook_agent.agent.provider.clone(),
+                        model: hook_agent.agent.model.clone(),
+                        instance_id: hook_agent.agent.instance_id.clone(),
+                        session_id: hook_agent.session_id.clone(),
+                        pid: hook_agent.pid,
+                        status: hook_agent.status.clone(),
+                        current_activity: hook_agent.current_activity.clone(),
+                        current_tool: hook_agent.current_tool.clone(),
+                        reported_confidence: hook_agent.reported_confidence,
+                        confidence_source: if hook_agent.reported_confidence.is_some() {
+                            "hook".to_owned()
+                        } else {
+                            "unreported".to_owned()
+                        },
+                        cpu_percent: process
+                            .and_then(|value| value.cpu_percent)
+                            .or(hook_agent.cpu_percent),
+                        rss_bytes: process
+                            .map(|value| value.rss_bytes)
+                            .or(hook_agent.rss_bytes),
+                        memory_percent: process
+                            .and_then(|value| value.memory_percent)
+                            .or(hook_agent.memory_percent),
+                        resource_source: if process.is_some() {
+                            "host_process".to_owned()
+                        } else if hook_has_resource {
+                            "hook".to_owned()
+                        } else {
+                            "unreported".to_owned()
+                        },
+                        input_tokens: hook_agent.input_tokens,
+                        output_tokens: hook_agent.output_tokens,
+                        process_backed: process.is_some(),
+                        hook_backed: true,
+                        last_hook_at: Some(hook_agent.last_hook_at),
+                        last_process_sample_at: process.map(|value| value.observed_at),
+                    }
                 });
         }
 
