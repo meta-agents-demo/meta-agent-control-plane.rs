@@ -1,0 +1,10 @@
+services:
+  control-plane:
+    pid: host
+    environment:
+      META_AGENT_RUNTIME_DISCOVERY_ENABLED: "true"
+    volumes:
+      - type: bind
+        source: /proc
+        target: /host/proc
+        read_only: true
