@@ -57,9 +57,13 @@ def emit(args: argparse.Namespace) -> None:
         "session_id": args.session_id,
         "pid": args.pid,
         "kind": args.kind,
+        "control_capable": args.control_capable,
         "summary": args.summary,
         "tool_name": args.tool_name,
         "confidence": args.confidence,
+        "cpu_percent": args.cpu_percent,
+        "rss_bytes": args.rss_bytes,
+        "memory_percent": args.memory_percent,
         "input_tokens_delta": args.input_tokens,
         "output_tokens_delta": args.output_tokens,
         "metadata": {"account_class": "ephemeral-test", "source": "runtime-hook.py"},
@@ -115,6 +119,15 @@ def parser() -> argparse.ArgumentParser:
     emit_parser.add_argument("--summary")
     emit_parser.add_argument("--tool-name")
     emit_parser.add_argument("--confidence", type=float)
+    emit_parser.add_argument("--cpu-percent", type=float)
+    emit_parser.add_argument("--rss-bytes", type=int)
+    emit_parser.add_argument("--memory-percent", type=float)
+    emit_parser.add_argument(
+        "--control-capable",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Declare that this agent also polls and acknowledges cooperative controls",
+    )
     emit_parser.add_argument("--input-tokens", type=int, default=0)
     emit_parser.add_argument("--output-tokens", type=int, default=0)
     emit_parser.set_defaults(func=emit)
