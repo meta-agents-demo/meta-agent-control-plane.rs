@@ -62,7 +62,10 @@ fn read_total_cpu(proc_root: &Path) -> Result<(u64, usize), String> {
     if aggregate_fields.next() != Some("cpu") {
         return Err("host CPU counters do not start with the aggregate cpu row".to_owned());
     }
+    // Linux reports guest and guest_nice inside user/nice as well as in their own
+    // columns. Sum user through steal only so the denominator is not double-counted.
     let total_ticks = aggregate_fields
+        .take(8)
         .filter_map(|value| value.parse::<u64>().ok())
         .sum();
     let cpu_count = lines
