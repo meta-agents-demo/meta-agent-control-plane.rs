@@ -1,0 +1,91 @@
+{
+  "tools": {
+    "enableHooks": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "meta-agent-session-start",
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py gemini"
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "meta-agent-before-agent",
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py gemini"
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "meta-agent-before-tool",
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py gemini"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "meta-agent-after-tool",
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py gemini"
+          }
+        ]
+      }
+    ],
+    "AfterModel": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "meta-agent-after-model",
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py gemini"
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "meta-agent-after-agent",
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py gemini"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "meta-agent-session-end",
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py gemini"
+          }
+        ]
+      }
+    ]
+  }
+}
