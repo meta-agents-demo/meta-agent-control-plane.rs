@@ -1,0 +1,27 @@
+services:
+  control-plane:
+    build:
+      context: .
+    image: meta-agent-control-plane:local
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      META_AGENT_HTTP_ADDR: 0.0.0.0:8787
+      META_AGENT_TCP_ADDR: 0.0.0.0:8788
+      META_AGENT_UDP_ADDR: 0.0.0.0:8789
+      META_AGENT_AUTH_TOKEN: ${META_AGENT_AUTH_TOKEN:?set a synthetic 32+ byte token}
+      META_AGENT_PROTECT_READ_API: "true"
+      META_AGENT_RUNTIME_DISCOVERY_ENABLED: ${META_AGENT_RUNTIME_DISCOVERY_ENABLED:-false}
+      META_AGENT_HOST_PROC_ROOT: /host/proc
+      META_AGENT_RUNTIME_SAMPLE_INTERVAL_MS: ${META_AGENT_RUNTIME_SAMPLE_INTERVAL_MS:-1000}
+      META_AGENT_PROCESS_PATTERNS: ${META_AGENT_PROCESS_PATTERNS:-claude,gemini,codex,chatgpt,openai}
+    ports:
+      - 127.0.0.1:8787:8787/tcp
+      - 127.0.0.1:8788:8788/tcp
+      - 127.0.0.1:8789:8789/udp
+    restart: unless-stopped
