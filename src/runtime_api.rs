@@ -240,7 +240,7 @@ mod tests {
 
     use axum::{
         body::{Body, to_bytes},
-        http::{Request, header},
+        http::{Method, Request, header},
     };
     use chrono::Utc;
     use tower::ServiceExt;
@@ -281,8 +281,9 @@ mod tests {
         })
     }
 
-    fn authorized_request(uri: &str, body: Body) -> Request<Body> {
+    fn authorized_request(method: Method, uri: &str, body: Body) -> Request<Body> {
         Request::builder()
+            .method(method)
             .uri(uri)
             .header(header::AUTHORIZATION, "Bearer test-token-at-least-16-bytes")
             .header(header::CONTENT_TYPE, "application/json")
@@ -354,6 +355,7 @@ mod tests {
         let response = app
             .clone()
             .oneshot(authorized_request(
+                Method::POST,
                 "/api/v1/runtime/hooks",
                 Body::from(serde_json::to_vec(&event).unwrap()),
             ))
@@ -363,6 +365,7 @@ mod tests {
 
         let response = app
             .oneshot(authorized_request(
+                Method::GET,
                 "/api/v1/runtime/snapshot",
                 Body::empty(),
             ))
@@ -384,6 +387,7 @@ mod tests {
         };
         let response = router(test_state(), test_runtime())
             .oneshot(authorized_request(
+                Method::POST,
                 "/api/v1/runtime/commands",
                 Body::from(serde_json::to_vec(&request).unwrap()),
             ))
@@ -400,6 +404,7 @@ mod tests {
         let response = app
             .clone()
             .oneshot(authorized_request(
+                Method::POST,
                 "/api/v1/runtime/hooks",
                 Body::from(serde_json::to_vec(&event).unwrap()),
             ))
@@ -414,6 +419,7 @@ mod tests {
         let response = app
             .clone()
             .oneshot(authorized_request(
+                Method::POST,
                 "/api/v1/runtime/commands",
                 Body::from(serde_json::to_vec(&request).unwrap()),
             ))
@@ -425,6 +431,7 @@ mod tests {
 
         let response = app
             .oneshot(authorized_request(
+                Method::POST,
                 "/api/v1/runtime/commands/ack",
                 Body::from(
                     serde_json::to_vec(&ControlCommandAck {
