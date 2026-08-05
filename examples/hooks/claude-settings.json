@@ -1,0 +1,70 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py claude"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py claude"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py claude"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py claude"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py claude"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /absolute/path/to/meta-agent-control-plane.rs/examples/hooks/agent_hook_adapter.py claude"
+          }
+        ]
+      }
+    ]
+  }
+}
