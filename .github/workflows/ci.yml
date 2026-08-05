@@ -53,12 +53,14 @@ jobs:
           python3 scripts/test_coordination_dashboard.py
           python3 scripts/test_explorer_dashboard.py
 
-      - name: Validate dashboard JavaScript syntax
+      - name: Validate dashboard and runtime-hook syntax
         run: |
           node --check scripts/dashboard.js
           node --check scripts/metacognition-dashboard.js
           node --check scripts/coordination-dashboard.js
           node --check scripts/explorer-dashboard.js
+          node --check scripts/runtime-dashboard.js
+          python3 -m py_compile examples/hooks/runtime-hook.py
 
       - name: Reject whitespace errors and conflict markers
         shell: bash
@@ -81,6 +83,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate hardened Compose overlays
+        env:
+          META_AGENT_AUTH_TOKEN: ci-compose-token-at-least-32-bytes
+        run: docker compose -f compose.yaml -f compose.linux.yaml config --quiet
+
       - name: Build the production image from the committed lockfile
         run: docker build --tag meta-agent-control-plane:ci .
 
@@ -93,12 +100,13 @@ jobs:
           test "$(docker image inspect --format '{{index .Config.Entrypoint 0}}' "$image")" = '/usr/local/bin/meta-agent-control-plane'
           test "$(docker image inspect --format '{{index .Config.Cmd 0}}' "$image")" = '--http-addr'
 
-      - name: Boot a read-only non-root container and probe health
+      - name: Boot a read-only non-root container and probe real hook data
         shell: bash
         run: |
           set -euo pipefail
           image='meta-agent-control-plane:ci'
           container='meta-agent-control-plane-ci'
+          token='ci-runtime-token-at-least-16-bytes'
           cleanup() {
             docker rm --force "$container" >/dev/null 2>&1 || true
           }
@@ -110,8 +118,9 @@ jobs:
             --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
             --cap-drop ALL \
             --security-opt no-new-privileges \
-            --env META_AGENT_AUTH_TOKEN='ci-runtime-token-at-least-16-bytes' \
+            --env META_AGENT_AUTH_TOKEN="$token" \
             --env META_AGENT_PROTECT_READ_API=true \
+            --env META_AGENT_RUNTIME_DISCOVERY_ENABLED=false \
             --publish 127.0.0.1::8787 \
             "$image" >/dev/null
 
@@ -121,10 +130,11 @@ jobs:
 
           port="$(docker port "$container" 8787/tcp | sed -E 's/.*:([0-9]+)$/\1/' | head -n 1)"
           test -n "$port"
+          base="http://127.0.0.1:${port}"
 
           ready=false
           for _ in $(seq 1 30); do
-            if curl --fail --silent --show-error "http://127.0.0.1:${port}/healthz" >/dev/null; then
+            if curl --fail --silent --show-error "$base/healthz" >/dev/null; then
               ready=true
               break
             fi
@@ -135,5 +145,44 @@ jobs:
             sleep 1
           done
           test "$ready" = true
-          curl --fail --silent --show-error "http://127.0.0.1:${port}/healthz"
-          curl --fail --silent --show-error "http://127.0.0.1:${port}/readyz"
+          curl --fail --silent --show-error "$base/healthz"
+          curl --fail --silent --show-error "$base/readyz"
+          curl --fail --silent --show-error "$base/runtime" | grep -F 'Live agent runtime' >/dev/null
+
+          curl --fail-with-body --silent --show-error \
+            -H "authorization: Bearer $token" \
+            -H 'content-type: application/json' \
+            --data '{
+              "protocol_version":"v1",
+              "event_id":"1d4d1bb7-0d6e-4d5f-b3f5-0dc84d80a416",
+              "occurred_at":"2026-08-05T14:00:00Z",
+              "agent":{"agent_id":"ci-claude-agent","provider":"anthropic","model":"ci-test-model"},
+              "session_id":"ci-session",
+              "kind":"model_response",
+              "summary":"Completed the container runtime contract",
+              "confidence":0.82,
+              "input_tokens_delta":21,
+              "output_tokens_delta":8,
+              "metadata":{"account_class":"ephemeral-test"}
+            }' \
+            "$base/api/v1/runtime/hooks" >/dev/null
+
+          curl --fail-with-body --silent --show-error \
+            -H "authorization: Bearer $token" \
+            "$base/api/v1/runtime/snapshot" > runtime-snapshot.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          snapshot = json.loads(Path('runtime-snapshot.json').read_text())
+          assert snapshot['collection']['enabled'] is False
+          assert snapshot['totals']['agents'] == 1
+          assert snapshot['totals']['hook_backed_agents'] == 1
+          agent = snapshot['agents'][0]
+          assert agent['agent_id'] == 'ci-claude-agent'
+          assert agent['reported_confidence'] == 0.82
+          assert agent['input_tokens'] == 21
+          assert agent['output_tokens'] == 8
+          assert agent['hook_backed'] is True
+          assert agent['process_backed'] is False
+          PY
