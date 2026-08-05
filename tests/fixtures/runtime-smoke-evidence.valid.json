@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-05T17:20:00Z",
+  "source_commit": "864bc97c159ab6107916f14d505e4962eeb3841e",
+  "runs": [
+    {
+      "provider": "anthropic",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "linux",
+      "test_case": "claude_native_hooks",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    },
+    {
+      "provider": "google",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "linux",
+      "test_case": "gemini_native_hooks",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    },
+    {
+      "provider": "openai",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "linux",
+      "test_case": "codex_proxy_transparency",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    },
+    {
+      "provider": "control-plane",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "linux",
+      "test_case": "linux_proc_pid_merge",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    },
+    {
+      "provider": "control-plane",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "macos",
+      "test_case": "macos_host_resources",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    },
+    {
+      "provider": "control-plane",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "windows",
+      "test_case": "windows_host_resources",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    },
+    {
+      "provider": "control-plane",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "linux",
+      "test_case": "confidence_unreported",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    },
+    {
+      "provider": "control-plane",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "linux",
+      "test_case": "observe_only_native_hooks",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    },
+    {
+      "provider": "control-plane",
+      "adapter_version": "git:2e0ea0c",
+      "operating_system": "linux",
+      "test_case": "dashboard_observed_sources",
+      "result": "unavailable",
+      "started_at": "2026-08-05T17:00:00Z",
+      "completed_at": "2026-08-05T17:01:00Z",
+      "owner": "@oresoftware",
+      "follow_up_date": "2026-08-12"
+    }
+  ]
+}
