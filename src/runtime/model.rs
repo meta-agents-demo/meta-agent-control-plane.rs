@@ -11,6 +11,7 @@ const MAX_TEXT_BYTES: usize = 4_096;
 const MAX_METADATA_ENTRIES: usize = 32;
 const MAX_METADATA_KEY_BYTES: usize = 128;
 const MAX_METADATA_VALUE_BYTES: usize = 1_024;
+const MAX_CPU_PERCENT: f64 = 100_000.0;
 const FORBIDDEN_METADATA_KEY_FRAGMENTS: &[&str] = &[
     "authorization",
     "chain_of_thought",
@@ -71,6 +72,12 @@ pub struct RuntimeHookEnvelope {
     pub tool_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_percent: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rss_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_percent: Option<f64>,
     #[serde(default)]
     pub input_tokens_delta: u64,
     #[serde(default)]
@@ -105,6 +112,18 @@ impl RuntimeHookEnvelope {
         }
         if self.kind == RuntimeHookKind::ConfidenceReported && self.confidence.is_none() {
             return Err(RuntimeError::MissingField("confidence"));
+        }
+        if self
+            .cpu_percent
+            .is_some_and(|value| !value.is_finite() || !(0.0..=MAX_CPU_PERCENT).contains(&value))
+        {
+            return Err(RuntimeError::InvalidField("cpu_percent"));
+        }
+        if self
+            .memory_percent
+            .is_some_and(|value| !value.is_finite() || !(0.0..=100.0).contains(&value))
+        {
+            return Err(RuntimeError::InvalidField("memory_percent"));
         }
         if self.metadata.len() > MAX_METADATA_ENTRIES {
             return Err(RuntimeError::TooManyMetadataEntries);
@@ -248,6 +267,7 @@ pub struct RuntimeAgentTelemetry {
     pub rss_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_percent: Option<f64>,
+    pub resource_source: String,
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub process_backed: bool,
