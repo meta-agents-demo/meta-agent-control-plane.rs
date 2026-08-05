@@ -3,6 +3,8 @@ use std::{env, path::PathBuf, time::Duration};
 mod collector;
 mod model;
 mod monitor;
+#[cfg(test)]
+mod tests;
 
 pub use model::*;
 pub use monitor::RuntimeMonitor;
