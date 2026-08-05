@@ -118,7 +118,7 @@ jobs:
             --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
             --cap-drop ALL \
             --security-opt no-new-privileges \
-            --env META_AGENT_AUTH_TOKEN="$token" \
+            --env META_AGENT_AUTH_TOKEN='ci-runtime-token-at-least-16-bytes' \
             --env META_AGENT_PROTECT_READ_API=true \
             --env META_AGENT_RUNTIME_DISCOVERY_ENABLED=false \
             --publish 127.0.0.1::8787 \
