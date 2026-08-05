@@ -60,6 +60,7 @@ struct HookAgentState {
     cpu_percent: Option<f64>,
     rss_bytes: Option<u64>,
     memory_percent: Option<f64>,
+    control_capable: bool,
     input_tokens: u64,
     output_tokens: u64,
     last_hook_at: DateTime<Utc>,
@@ -206,6 +207,7 @@ impl RuntimeMonitor {
                 cpu_percent: hook.cpu_percent,
                 rss_bytes: hook.rss_bytes,
                 memory_percent: hook.memory_percent,
+                control_capable: hook.control_capable,
                 input_tokens: 0,
                 output_tokens: 0,
                 last_hook_at: hook.occurred_at,
@@ -213,6 +215,7 @@ impl RuntimeMonitor {
         let updates_current_state = hook.occurred_at >= agent.last_hook_at;
         agent.input_tokens = agent.input_tokens.saturating_add(hook.input_tokens_delta);
         agent.output_tokens = agent.output_tokens.saturating_add(hook.output_tokens_delta);
+        agent.control_capable |= hook.control_capable;
         if updates_current_state {
             agent.agent = hook.agent.clone();
             if hook.session_id.is_some() {
@@ -278,7 +281,11 @@ impl RuntimeMonitor {
     ) -> Result<ControlCommand, RuntimeError> {
         request.validate()?;
         let mut state = self.state.write().await;
-        if !state.hook_agents.contains_key(&request.agent_id) {
+        if !state
+            .hook_agents
+            .get(&request.agent_id)
+            .is_some_and(|agent| agent.control_capable)
+        {
             return Err(RuntimeError::AgentNotHookBacked);
         }
         let command = ControlCommand {
@@ -373,6 +380,7 @@ impl RuntimeMonitor {
                     output_tokens: 0,
                     process_backed: true,
                     hook_backed: false,
+                    control_capable: false,
                     last_hook_at: None,
                     last_process_sample_at: Some(process.observed_at),
                 },
@@ -401,6 +409,7 @@ impl RuntimeMonitor {
                     agent.input_tokens = hook_agent.input_tokens;
                     agent.output_tokens = hook_agent.output_tokens;
                     agent.hook_backed = true;
+                    agent.control_capable = hook_agent.control_capable;
                     agent.last_hook_at = Some(hook_agent.last_hook_at);
                 })
                 .or_insert_with(|| {
@@ -443,6 +452,7 @@ impl RuntimeMonitor {
                         output_tokens: hook_agent.output_tokens,
                         process_backed: process.is_some(),
                         hook_backed: true,
+                        control_capable: hook_agent.control_capable,
                         last_hook_at: Some(hook_agent.last_hook_at),
                         last_process_sample_at: process.map(|value| value.observed_at),
                     }
