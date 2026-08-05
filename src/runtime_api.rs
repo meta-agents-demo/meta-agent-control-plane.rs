@@ -308,6 +308,9 @@ mod tests {
             summary: Some("Visible response summary".to_owned()),
             tool_name: None,
             confidence: Some(0.8),
+            cpu_percent: Some(18.5),
+            rss_bytes: Some(64 * 1_024 * 1_024),
+            memory_percent: Some(2.0),
             input_tokens_delta: 20,
             output_tokens_delta: 8,
             metadata: Default::default(),
@@ -376,6 +379,8 @@ mod tests {
         let snapshot: RuntimeSnapshot = serde_json::from_slice(&body).unwrap();
         assert_eq!(snapshot.agents.len(), 1);
         assert_eq!(snapshot.agents[0].reported_confidence, Some(0.8));
+        assert_eq!(snapshot.agents[0].cpu_percent, Some(18.5));
+        assert_eq!(snapshot.agents[0].resource_source, "hook");
         assert_eq!(snapshot.agents[0].input_tokens, 20);
     }
 
