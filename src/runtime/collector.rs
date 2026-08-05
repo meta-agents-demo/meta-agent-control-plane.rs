@@ -134,9 +134,7 @@ fn provider_for_pattern(pattern: &str) -> &'static str {
         "anthropic"
     } else if pattern.contains("gemini") || pattern.contains("google") {
         "google"
-    } else if pattern.contains("codex")
-        || pattern.contains("chatgpt")
-        || pattern.contains("openai")
+    } else if pattern.contains("codex") || pattern.contains("chatgpt") || pattern.contains("openai")
     {
         "openai"
     } else {
