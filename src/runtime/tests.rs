@@ -61,6 +61,9 @@ fn hook(event_id: Uuid, kind: RuntimeHookKind) -> RuntimeHookEnvelope {
         summary: Some("Visible activity summary".to_owned()),
         tool_name: None,
         confidence: Some(0.75),
+        cpu_percent: None,
+        rss_bytes: None,
+        memory_percent: None,
         input_tokens_delta: 10,
         output_tokens_delta: 4,
         metadata: BTreeMap::new(),
@@ -103,6 +106,7 @@ async fn merges_hook_confidence_and_tokens_with_process_telemetry() {
     let agent = &snapshot.agents[0];
     assert!(agent.process_backed);
     assert!(agent.hook_backed);
+    assert_eq!(agent.resource_source, "host_process");
     assert_eq!(agent.reported_confidence, Some(0.75));
     assert_eq!(agent.confidence_source, "hook");
     assert_eq!(agent.input_tokens, 10);
@@ -111,19 +115,44 @@ async fn merges_hook_confidence_and_tokens_with_process_telemetry() {
 }
 
 #[tokio::test]
-async fn older_hooks_do_not_replace_current_activity_or_confidence() {
+async fn uses_hook_resource_samples_when_host_proc_is_unavailable() {
+    let root = temp_proc_root();
+    let monitor = RuntimeMonitor::new(RuntimeConfig::test(root.clone()));
+    let mut event = hook(Uuid::new_v4(), RuntimeHookKind::Heartbeat);
+    event.pid = None;
+    event.cpu_percent = Some(37.5);
+    event.rss_bytes = Some(128 * 1_024 * 1_024);
+    event.memory_percent = Some(3.25);
+    monitor.ingest_hook(event).await.unwrap();
+
+    let snapshot = monitor.snapshot().await;
+    assert_eq!(snapshot.agents.len(), 1);
+    let agent = &snapshot.agents[0];
+    assert!(!agent.process_backed);
+    assert!(agent.hook_backed);
+    assert_eq!(agent.resource_source, "hook");
+    assert_eq!(agent.cpu_percent, Some(37.5));
+    assert_eq!(agent.rss_bytes, Some(128 * 1_024 * 1_024));
+    assert_eq!(agent.memory_percent, Some(3.25));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn older_hooks_do_not_replace_current_activity_or_resources() {
     let root = temp_proc_root();
     let monitor = RuntimeMonitor::new(RuntimeConfig::test(root.clone()));
     let mut current = hook(Uuid::new_v4(), RuntimeHookKind::Activity);
     current.occurred_at = Utc::now();
     current.summary = Some("Current visible activity".to_owned());
     current.confidence = Some(0.9);
+    current.cpu_percent = Some(12.0);
     monitor.ingest_hook(current.clone()).await.unwrap();
 
     let mut older = hook(Uuid::new_v4(), RuntimeHookKind::ErrorObserved);
     older.occurred_at = current.occurred_at - chrono::Duration::seconds(5);
     older.summary = Some("Older delayed activity".to_owned());
     older.confidence = Some(0.1);
+    older.cpu_percent = Some(99.0);
     monitor.ingest_hook(older).await.unwrap();
 
     let snapshot = monitor.snapshot().await;
@@ -133,6 +162,7 @@ async fn older_hooks_do_not_replace_current_activity_or_confidence() {
         Some("Current visible activity")
     );
     assert_eq!(snapshot.agents[0].reported_confidence, Some(0.9));
+    assert_eq!(snapshot.agents[0].cpu_percent, Some(12.0));
     assert_eq!(snapshot.agents[0].input_tokens, 20);
     fs::remove_dir_all(root).unwrap();
 }
@@ -165,6 +195,20 @@ async fn rejects_hidden_reasoning_metadata_and_duplicate_hooks() {
         "must-not-cross-boundary".to_owned(),
     );
     assert_eq!(secret.validate(), Err(RuntimeError::ForbiddenMetadataKey));
+
+    let mut invalid_cpu = hook(Uuid::new_v4(), RuntimeHookKind::Heartbeat);
+    invalid_cpu.cpu_percent = Some(f64::NAN);
+    assert_eq!(
+        invalid_cpu.validate(),
+        Err(RuntimeError::InvalidField("cpu_percent"))
+    );
+
+    let mut invalid_memory = hook(Uuid::new_v4(), RuntimeHookKind::Heartbeat);
+    invalid_memory.memory_percent = Some(100.1);
+    assert_eq!(
+        invalid_memory.validate(),
+        Err(RuntimeError::InvalidField("memory_percent"))
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
