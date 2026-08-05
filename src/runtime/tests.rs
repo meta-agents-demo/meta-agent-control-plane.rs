@@ -58,6 +58,7 @@ fn hook(event_id: Uuid, kind: RuntimeHookKind) -> RuntimeHookEnvelope {
         session_id: Some("session-1".to_owned()),
         pid: Some(4242),
         kind,
+        control_capable: true,
         summary: Some("Visible activity summary".to_owned()),
         tool_name: None,
         confidence: Some(0.75),
@@ -106,6 +107,7 @@ async fn merges_hook_confidence_and_tokens_with_process_telemetry() {
     let agent = &snapshot.agents[0];
     assert!(agent.process_backed);
     assert!(agent.hook_backed);
+    assert!(agent.control_capable);
     assert_eq!(agent.resource_source, "host_process");
     assert_eq!(agent.reported_confidence, Some(0.75));
     assert_eq!(agent.confidence_source, "hook");
@@ -209,6 +211,27 @@ async fn rejects_hidden_reasoning_metadata_and_duplicate_hooks() {
         invalid_memory.validate(),
         Err(RuntimeError::InvalidField("memory_percent"))
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn rejects_controls_for_observe_only_hooks() {
+    let root = temp_proc_root();
+    let monitor = RuntimeMonitor::new(RuntimeConfig::test(root.clone()));
+    let mut event = hook(Uuid::new_v4(), RuntimeHookKind::Heartbeat);
+    event.control_capable = false;
+    monitor.ingest_hook(event).await.unwrap();
+
+    assert_eq!(
+        monitor
+            .enqueue_command(ControlCommandRequest {
+                agent_id: "claude-test".to_owned(),
+                action: ControlAction::Pause,
+            })
+            .await,
+        Err(RuntimeError::AgentNotHookBacked)
+    );
+    assert!(!monitor.snapshot().await.agents[0].control_capable);
     fs::remove_dir_all(root).unwrap();
 }
 
