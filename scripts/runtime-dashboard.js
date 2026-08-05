@@ -137,7 +137,7 @@
       <td>${percent(agent.cpu_percent)}</td>
       <td>${agent.rss_bytes == null ? 'unavailable' : bytes(agent.rss_bytes)}</td>
       <td><span class="confidence ${agent.reported_confidence == null ? 'muted' : ''}">${confidence(agent.reported_confidence)}</span></td>
-      <td>${agent.hook_backed ? 'hook' : 'process'}${agent.process_backed && agent.hook_backed ? ' + process' : ''}</td>
+      <td>${agent.hook_backed ? 'hook' : 'process'}${agent.process_backed && agent.hook_backed ? ' + process' : ''}<small>resources: ${esc(agent.resource_source || 'unreported')}</small></td>
       <td>${time(agent.last_hook_at || agent.last_process_sample_at)}</td>
     </tr>`).join('');
   }
@@ -157,7 +157,7 @@
         <div class="bar"><span style="width:${cpu}%"></span></div>
         <label>Host memory <span>${agent.memory_percent == null ? 'unavailable' : percent(agent.memory_percent)}</span></label>
         <div class="bar memory"><span style="width:${memory}%"></span></div>
-        <small>${agent.rss_bytes == null ? 'RSS unavailable' : `${bytes(agent.rss_bytes)} RSS`}</small>
+        <small>${agent.rss_bytes == null ? 'RSS unavailable' : `${bytes(agent.rss_bytes)} RSS`} · source: ${esc(agent.resource_source || 'unreported')}</small>
       </article>`;
     }).join('');
   }
@@ -210,14 +210,22 @@
     if (!agents.length) {
       target.innerHTML = '<p class="empty">No agents available for control.</p>';
     } else {
-      target.innerHTML = agents.map((agent) => `<article class="control-card">
-        <div><strong>${esc(agent.agent_id)}</strong><small>${agent.hook_backed ? 'Hook-aware control channel' : 'Observe-only process'}</small></div>
-        <div class="button-row">
-          <button data-command="pause" data-agent="${esc(agent.agent_id)}" ${agent.hook_backed ? '' : 'disabled'}>Pause</button>
-          <button data-command="resume" data-agent="${esc(agent.agent_id)}" ${agent.hook_backed ? '' : 'disabled'}>Resume</button>
-          <button class="danger" data-command="stop" data-agent="${esc(agent.agent_id)}" ${agent.hook_backed ? '' : 'disabled'}>Stop</button>
-        </div>
-      </article>`).join('');
+      target.innerHTML = agents.map((agent) => {
+        const controlLabel = agent.control_capable
+          ? 'Cooperative control channel'
+          : agent.hook_backed
+            ? 'Observe-only native hook'
+            : 'Observe-only process';
+        const disabled = agent.control_capable ? '' : 'disabled';
+        return `<article class="control-card">
+          <div><strong>${esc(agent.agent_id)}</strong><small>${controlLabel}</small></div>
+          <div class="button-row">
+            <button data-command="pause" data-agent="${esc(agent.agent_id)}" ${disabled}>Pause</button>
+            <button data-command="resume" data-agent="${esc(agent.agent_id)}" ${disabled}>Resume</button>
+            <button class="danger" data-command="stop" data-agent="${esc(agent.agent_id)}" ${disabled}>Stop</button>
+          </div>
+        </article>`;
+      }).join('');
     }
     const recent = $('command-rows');
     if (!commands.length) {
