@@ -168,7 +168,7 @@ impl RuntimeMonitor {
                     cpu_percent,
                     rss_bytes: process.rss_bytes,
                     memory_percent,
-                    observed_at: observed_at.clone(),
+                    observed_at,
                 },
             );
         }
@@ -202,7 +202,7 @@ impl RuntimeMonitor {
                 reported_confidence: None,
                 input_tokens: 0,
                 output_tokens: 0,
-                last_hook_at: hook.occurred_at.clone(),
+                last_hook_at: hook.occurred_at,
             });
         let updates_current_state = hook.occurred_at >= agent.last_hook_at;
         agent.input_tokens = agent.input_tokens.saturating_add(hook.input_tokens_delta);
@@ -215,7 +215,7 @@ impl RuntimeMonitor {
             if hook.pid.is_some() {
                 agent.pid = hook.pid;
             }
-            agent.last_hook_at = hook.occurred_at.clone();
+            agent.last_hook_at = hook.occurred_at;
             if hook.confidence.is_some() {
                 agent.reported_confidence = hook.confidence;
             }
@@ -358,7 +358,7 @@ impl RuntimeMonitor {
                     process_backed: true,
                     hook_backed: false,
                     last_hook_at: None,
-                    last_process_sample_at: Some(process.observed_at.clone()),
+                    last_process_sample_at: Some(process.observed_at),
                 },
             );
         }
@@ -385,7 +385,7 @@ impl RuntimeMonitor {
                     agent.input_tokens = hook_agent.input_tokens;
                     agent.output_tokens = hook_agent.output_tokens;
                     agent.hook_backed = true;
-                    agent.last_hook_at = Some(hook_agent.last_hook_at.clone());
+                    agent.last_hook_at = Some(hook_agent.last_hook_at);
                 })
                 .or_insert_with(|| RuntimeAgentTelemetry {
                     agent_id: hook_agent.agent.agent_id.clone(),
@@ -410,8 +410,8 @@ impl RuntimeMonitor {
                     output_tokens: hook_agent.output_tokens,
                     process_backed: process.is_some(),
                     hook_backed: true,
-                    last_hook_at: Some(hook_agent.last_hook_at.clone()),
-                    last_process_sample_at: process.map(|value| value.observed_at.clone()),
+                    last_hook_at: Some(hook_agent.last_hook_at),
+                    last_process_sample_at: process.map(|value| value.observed_at),
                 });
         }
 
@@ -451,7 +451,7 @@ impl RuntimeMonitor {
                 process_patterns: self.config.process_patterns.clone(),
                 cpu_count: state.cpu_count,
                 memory_total_bytes: state.memory_total_bytes,
-                last_sample_at: state.last_sample_at.clone(),
+                last_sample_at: state.last_sample_at,
                 last_error: state.last_error.clone(),
                 collection_errors: state.collection_errors,
             },
