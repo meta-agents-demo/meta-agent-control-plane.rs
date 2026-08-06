@@ -70,6 +70,14 @@ class FleetRunner:
         atomic_write_json(self.state_path(job.job_id), previous)
         return previous
 
+    def cleanup_logs(self, *paths: Path) -> None:
+        """Remove provider transcript files unless explicit local retention is enabled."""
+        if self.keep_raw_logs:
+            return
+        for path in paths:
+            with contextlib.suppress(OSError):
+                path.unlink(missing_ok=True)
+
     def reconcile_interrupted_states(self) -> None:
         for path in self.runs_dir.glob("*/state.json"):
             try:
@@ -170,6 +178,7 @@ class FleetRunner:
                 pending_task.cancel()
             if stop_task in done and self.stop_event.is_set():
                 await terminate_process_group(process, self.shutdown_grace)
+                self.cleanup_logs(stdout_path, stderr_path)
                 self.save_state(
                     job, status="paused", pause_reason="runner_shutdown", pid=None,
                     head_commit=safe_git_output(workspace, "rev-parse", "HEAD"),
@@ -178,6 +187,7 @@ class FleetRunner:
                 return
             if not done:
                 await terminate_process_group(process, self.shutdown_grace)
+                self.cleanup_logs(stdout_path, stderr_path)
                 self.save_state(job, status="queued", error_class="timeout", pid=None)
                 self.hooks.emit(job, "error_observed", "Provider worker exceeded its bounded run timeout")
                 return
@@ -185,9 +195,7 @@ class FleetRunner:
 
         output_tail = read_tail(stdout_path) + "\n" + read_tail(stderr_path)
         error_class = classify_provider_error(output_tail, return_code)
-        if not self.keep_raw_logs:
-            stdout_path.unlink(missing_ok=True)
-            stderr_path.unlink(missing_ok=True)
+        self.cleanup_logs(stdout_path, stderr_path)
         head_commit = safe_git_output(workspace, "rev-parse", "HEAD")
         dirty_count = count_dirty_entries(workspace)
         if return_code == 0:

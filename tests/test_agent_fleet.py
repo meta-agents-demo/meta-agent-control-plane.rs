@@ -101,6 +101,24 @@ class PersistenceTests(unittest.TestCase):
             self.assertTrue(queued.exists())
             self.assertFalse((root / "state" / "runs" / "audit-1" / "state.json").exists())
 
+    def test_transient_provider_logs_are_removed_unless_retained(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with mock.patch.dict(os.environ, {"META_AGENT_HOOKS_ENABLED": "false"}, clear=False):
+                runner = agent_fleet.FleetRunner(root / "state")
+            stdout = root / "stdout.log"
+            stderr = root / "stderr.log"
+            stdout.write_text("provider transcript")
+            stderr.write_text("provider error")
+            runner.cleanup_logs(stdout, stderr)
+            self.assertFalse(stdout.exists())
+            self.assertFalse(stderr.exists())
+
+            stdout.write_text("retained transcript")
+            runner.keep_raw_logs = True
+            runner.cleanup_logs(stdout)
+            self.assertTrue(stdout.exists())
+
 
 class ProviderTests(unittest.TestCase):
     def test_quota_and_rate_limit_classification(self):
