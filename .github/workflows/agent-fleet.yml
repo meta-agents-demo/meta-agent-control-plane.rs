@@ -1,0 +1,64 @@
+name: Agent fleet contract
+
+on:
+  pull_request:
+    paths:
+      - scripts/agent_fleet.py
+      - scripts/fleet/**
+      - tests/test_agent_fleet.py
+      - Dockerfile.agent-runner
+      - compose.agents.yaml
+      - .env.agent-runner.example
+      - docs/agent-fleet.md
+      - .github/workflows/agent-fleet.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/agent_fleet.py
+      - scripts/fleet/**
+      - tests/test_agent_fleet.py
+      - Dockerfile.agent-runner
+      - compose.agents.yaml
+      - .env.agent-runner.example
+      - docs/agent-fleet.md
+      - .github/workflows/agent-fleet.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Compile and run standard-library tests
+        run: |
+          python3 -m py_compile scripts/agent_fleet.py scripts/fleet/*.py tests/test_agent_fleet.py
+          python3 -m unittest -v tests/test_agent_fleet.py
+      - name: Reject credential-shaped values in tracked fleet files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'sk-(svcacct|ant-api|proj)-[A-Za-z0-9_-]{16,}' \
+            scripts/agent_fleet.py scripts/fleet/*.py tests/test_agent_fleet.py Dockerfile.agent-runner \
+            compose.agents.yaml .env.agent-runner.example docs/agent-fleet.md; then
+            echo 'credential-shaped value found' >&2
+            exit 1
+          fi
+      - name: Validate Compose model without secret values
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OPENAI_API_KEY_FILE=/tmp/openai
+          export ANTHROPIC_API_KEY_FILE=/tmp/anthropic
+          export GH_TOKEN_FILE=/tmp/github
+          export META_AGENT_AUTH_TOKEN_FILE=/tmp/control-plane
+          docker compose -f compose.yaml -f compose.agents.yaml config --quiet
