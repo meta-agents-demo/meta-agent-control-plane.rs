@@ -44,24 +44,49 @@ def isolated_child_environment() -> dict[str, str]:
     return environment
 
 
-def provider_environment(provider: str) -> dict[str, str]:
-    environment = isolated_child_environment()
+def provider_api_key(provider: str) -> str:
     if provider == "openai":
-        selected_key = read_secret("OPENAI_API_KEY_FILE", "OPENAI_API_KEY")
-        if not selected_key:
+        value = read_secret("OPENAI_API_KEY_FILE", "OPENAI_API_KEY")
+        if not value:
             raise ValueError("OpenAI worker requires OPENAI_API_KEY_FILE or OPENAI_API_KEY")
+        return value
+    if provider == "anthropic":
+        value = read_secret("ANTHROPIC_API_KEY_FILE", "ANTHROPIC_API_KEY")
+        if not value:
+            raise ValueError("Anthropic worker requires ANTHROPIC_API_KEY_FILE or ANTHROPIC_API_KEY")
+        return value
+    raise ValueError("unsupported provider")
+
+
+def provider_environment(provider: str, job: Job | None = None, ledger_path: Path | None = None) -> dict[str, str]:
+    environment = isolated_child_environment()
+    selected_key = provider_api_key(provider)
+    if provider == "openai":
         environment["OPENAI_API_KEY"] = selected_key
         environment.pop("ANTHROPIC_API_KEY", None)
+        environment.pop("ANTHROPIC_API_KEY_FILE", None)
     else:
-        selected_key = read_secret("ANTHROPIC_API_KEY_FILE", "ANTHROPIC_API_KEY")
-        if not selected_key:
-            raise ValueError("Anthropic worker requires ANTHROPIC_API_KEY_FILE or ANTHROPIC_API_KEY")
         environment["ANTHROPIC_API_KEY"] = selected_key
         environment.pop("OPENAI_API_KEY", None)
+        environment.pop("OPENAI_API_KEY_FILE", None)
     github_token = read_secret("GH_TOKEN_FILE", "GH_TOKEN")
     if github_token:
         environment.update(GH_TOKEN=github_token, GITHUB_TOKEN=github_token)
     environment["META_AGENT_EPHEMERAL_ACCOUNT"] = "true"
+    if job is not None:
+        environment.update(
+            META_AGENT_REAL_TASK="true",
+            META_AGENT_AGENT_ID=f"fleet-{job.provider}-{job.job_id}",
+            META_AGENT_PROVIDER=job.provider,
+            META_AGENT_MODEL=job.model or "provider-default",
+            META_AGENT_INSTANCE_ID=job.job_id,
+            META_AGENT_SESSION_ID=job.job_id,
+            META_AGENT_CORRELATION_ID=job.job_id,
+            META_AGENT_TASK_ID=job.job_id,
+            META_AGENT_ASSIGNED_BRANCH=job.effective_branch,
+        )
+        if ledger_path is not None:
+            environment["META_AGENT_OBSERVATION_LEDGER"] = str(ledger_path)
     environment.setdefault("GIT_AUTHOR_NAME", "meta-agent-fleet")
     environment.setdefault("GIT_AUTHOR_EMAIL", "meta-agent-fleet@users.noreply.github.com")
     environment.setdefault("GIT_COMMITTER_NAME", environment["GIT_AUTHOR_NAME"])
@@ -102,12 +127,9 @@ class ProviderCircuit:
         return self.blocked_until(provider) > time.time()
 
     def block(self, provider: str, reason: str, seconds: int) -> None:
-        providers = self.value.setdefault("providers", {})
-        providers[provider] = {
-            "status": "unavailable",
-            "reason": reason,
-            "blocked_until_epoch": int(time.time()) + seconds,
-            "updated_at": utc_now(),
+        self.value.setdefault("providers", {})[provider] = {
+            "status": "unavailable", "reason": reason,
+            "blocked_until_epoch": int(time.time()) + seconds, "updated_at": utc_now(),
         }
         atomic_write_json(self.path, self.value)
 
@@ -117,6 +139,8 @@ class ProviderCircuit:
 
 
 class HookClient:
+    """Process-level telemetry; canonical task evidence uses EventClient instead."""
+
     def __init__(self) -> None:
         self.base_url = os.getenv("META_AGENT_RUNTIME_URL", "http://control-plane:8787").rstrip("/")
         self.token = read_secret("META_AGENT_AUTH_TOKEN_FILE", "META_AGENT_AUTH_TOKEN")
@@ -130,16 +154,14 @@ class HookClient:
             "event_id": str(uuid.uuid4()),
             "occurred_at": utc_now(),
             "agent": {
-                "agent_id": f"fleet-{job.job_id}",
-                "provider": job.provider,
-                "model": job.model or "provider-default",
-                "instance_id": job.job_id,
+                "agent_id": f"fleet-{job.job_id}", "provider": job.provider,
+                "model": job.model or "provider-default", "instance_id": job.job_id,
             },
             "session_id": job.job_id,
             "kind": kind,
             "control_capable": False,
             "summary": summary,
-            "metadata": {"account_class": "ephemeral-project"},
+            "metadata": {"work_class": "real_repository_task", "generated_data": "disabled"},
         }
         if pid is not None:
             payload["pid"] = pid
@@ -154,7 +176,7 @@ class HookClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=3) as response:
-                response.read(1024)
+                response.read(1_024)
         except (OSError, urllib.error.URLError, urllib.error.HTTPError):
             return
 
