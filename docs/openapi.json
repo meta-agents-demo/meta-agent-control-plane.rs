@@ -1,60 +1,272 @@
 {
-  "openapi": "3.1.0",
-  "info": {
-    "title": "Meta-Agent Control Plane API",
-    "version": "0.1.0",
-    "description": "Provider-neutral telemetry for observable agent goals, tasks, progress, explicit reflection, and learned lessons. Hidden chain-of-thought is intentionally excluded."
-  },
-  "servers": [
-    {
-      "url": "/",
-      "description": "Same-origin daemon API"
-    }
-  ],
-  "paths": {
-    "/api/v1/events": {
-      "post": {
-        "summary": "Ingest one agent event",
-        "security": [
-          {
-            "bearerAuth": []
-          }
+  "components": {
+    "schemas": {
+      "AgentRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agent_id",
+          "provider",
+          "model"
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EventEnvelope"
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "instance_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256
+          }
+        }
+      },
+      "CoordinationPlan": {
+        "additionalProperties": false,
+        "description": "Deterministic read-only plan containing bounded assignments, interventions, held tasks, planning policies, and source-event provenance.",
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "planning_policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_assignments",
+              "max_assignments_per_agent",
+              "max_interventions",
+              "max_holds"
+            ],
+            "properties": {
+              "max_assignments": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "max_assignments_per_agent": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "max_interventions": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "max_holds": {
+                "type": "integer",
+                "minimum": 1
               }
+            }
+          },
+          "analysis_policy": {
+            "type": "object"
+          },
+          "summary": {
+            "type": "object"
+          },
+          "assignments": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "interventions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "held_tasks": {
+            "type": "array",
+            "items": {
+              "type": "object"
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Duplicate event acknowledged within the bounded idempotency window"
+        "required": [
+          "generated_at",
+          "revision",
+          "planning_policy",
+          "analysis_policy",
+          "summary",
+          "assignments",
+          "interventions",
+          "held_tasks"
+        ],
+        "type": "object"
+      },
+      "EventEnvelope": {
+        "type": "object",
+        "required": [
+          "protocol_version",
+          "event_id",
+          "occurred_at",
+          "agent",
+          "kind",
+          "data"
+        ],
+        "properties": {
+          "protocol_version": {
+            "const": "v1"
           },
-          "202": {
-            "description": "New event accepted"
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
           },
-          "400": {
-            "description": "Malformed or invalid event"
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
           },
-          "401": {
-            "description": "Authentication failed"
+          "agent": {
+            "$ref": "#/components/schemas/AgentRef"
+          },
+          "session_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256
+          },
+          "correlation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256
+          },
+          "sequence": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent_registered",
+              "heartbeat",
+              "goal_declared",
+              "task_created",
+              "task_started",
+              "progress_updated",
+              "reflection_recorded",
+              "lesson_learned",
+              "error_observed",
+              "task_completed",
+              "agent_status_changed"
+            ]
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      },
+      "ExplorerSnapshot": {
+        "type": "object",
+        "description": "Read-only bounded operator projection containing sorted agents, retained session summaries, timeline events, lessons, system pressure, counters, policy, and explicit omission counts."
+      },
+      "IngestAck": {
+        "type": "object",
+        "required": [
+          "accepted",
+          "duplicate",
+          "event_id",
+          "revision",
+          "transport",
+          "received_at"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transport": {
+            "type": "string",
+            "enum": [
+              "http",
+              "websocket",
+              "tcp",
+              "udp"
+            ]
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MetacognitionSnapshot": {
+        "description": "Deterministic read-only projection of visible progress, evidence, dependency, retry, stall, and consistency diagnostics.",
+        "type": "object"
+      },
+      "Snapshot": {
+        "type": "object",
+        "description": "Bounded LRU projection containing agents, goals, tasks, lessons, recent events, an independent idempotency window, counters, and cache pressure."
+      },
+      "TransportFrame": {
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "properties": {
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "writeOnly": true
+          },
+          "event": {
+            "$ref": "#/components/schemas/EventEnvelope"
           }
         }
       }
     },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque"
+      }
+    }
+  },
+  "info": {
+    "title": "Meta-Agent Control Plane API",
+    "version": "0.1.0",
+    "description": "Provider-neutral telemetry for observable agent goals, tasks, progress, explicit reflection, learned lessons, explainable metacognition, and bounded coordination recommendations. Hidden chain-of-thought is intentionally excluded."
+  },
+  "openapi": "3.1.0",
+  "paths": {
     "/api/v1/coordination": {
       "get": {
-        "summary": "Build the current deterministic coordination plan",
         "description": "Returns bounded dependency-safe assignments, operator interventions, and held tasks derived from visible retained state. The endpoint is read-only and never dispatches or mutates agent work.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "max_assignments",
@@ -103,14 +315,14 @@
         ],
         "responses": {
           "200": {
-            "description": "Current coordination plan",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CoordinationPlan"
                 }
               }
-            }
+            },
+            "description": "Current coordination plan"
           },
           "400": {
             "description": "Planning query was malformed, unknown, duplicated, zero, or above its server cap"
@@ -120,6 +332,46 @@
           },
           "500": {
             "description": "The configured planning policy could not produce a plan"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Build the current deterministic coordination plan"
+      }
+    },
+    "/api/v1/events": {
+      "post": {
+        "summary": "Ingest one agent event",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventEnvelope"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Duplicate event acknowledged within the bounded idempotency window"
+          },
+          "202": {
+            "description": "New event accepted"
+          },
+          "400": {
+            "description": "Malformed or invalid event"
+          },
+          "401": {
+            "description": "Authentication failed"
           }
         }
       }
@@ -193,28 +445,28 @@
     },
     "/api/v1/metacognition": {
       "get": {
-        "summary": "Read the current explainable metacognition projection",
         "description": "Returns deterministic diagnostics, evidence-backed progress, critical paths, stalls, retry loops, and recommended actions derived only from visible retained state.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
         "responses": {
           "200": {
-            "description": "Current metacognition projection",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetacognitionSnapshot"
                 }
               }
-            }
+            },
+            "description": "Current metacognition projection"
           },
           "401": {
             "description": "Read API authentication failed"
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read the current explainable metacognition projection"
       }
     },
     "/api/v1/snapshot": {
@@ -227,10 +479,52 @@
         ],
         "responses": {
           "200": {
-            "description": "Current coherent projection and server revision"
+            "description": "Current coherent projection and server revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
           },
           "401": {
             "description": "Read API authentication failed"
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Liveness probe",
+        "responses": {
+          "200": {
+            "description": "Alive"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus text exposition",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metrics"
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "summary": "Readiness probe",
+        "responses": {
+          "200": {
+            "description": "Ready"
           }
         }
       }
@@ -246,179 +540,14 @@
         "summary": "Live projection invalidation stream",
         "description": "Emits StoreUpdate messages; clients refetch a sequence-watermarked snapshot."
       }
-    },
-    "/healthz": {
-      "get": {
-        "summary": "Liveness probe",
-        "responses": {
-          "200": {
-            "description": "Alive"
-          }
-        }
-      }
-    },
-    "/readyz": {
-      "get": {
-        "summary": "Readiness probe",
-        "responses": {
-          "200": {
-            "description": "Ready"
-          }
-        }
-      }
-    },
-    "/metrics": {
-      "get": {
-        "summary": "Prometheus text exposition",
-        "responses": {
-          "200": {
-            "description": "Metrics"
-          }
-        }
-      }
     }
   },
-  "components": {
-    "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "opaque"
-      }
-    },
-    "schemas": {
-      "AgentRef": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "agent_id",
-          "provider",
-          "model"
-        ],
-        "properties": {
-          "agent_id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 256
-          },
-          "provider": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          },
-          "model": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 256
-          },
-          "instance_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 256
-          }
-        }
-      },
-      "EventEnvelope": {
-        "type": "object",
-        "required": [
-          "protocol_version",
-          "event_id",
-          "occurred_at",
-          "agent",
-          "kind",
-          "data"
-        ],
-        "properties": {
-          "protocol_version": {
-            "const": "v1"
-          },
-          "event_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "occurred_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "agent": {
-            "$ref": "#/components/schemas/AgentRef"
-          },
-          "session_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 256
-          },
-          "correlation_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 256
-          },
-          "sequence": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 0
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "agent_registered",
-              "heartbeat",
-              "goal_declared",
-              "task_created",
-              "task_started",
-              "progress_updated",
-              "reflection_recorded",
-              "lesson_learned",
-              "error_observed",
-              "task_completed",
-              "agent_status_changed"
-            ]
-          },
-          "data": {
-            "type": "object"
-          }
-        }
-      },
-      "TransportFrame": {
-        "type": "object",
-        "required": [
-          "event"
-        ],
-        "properties": {
-          "token": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "writeOnly": true
-          },
-          "event": {
-            "$ref": "#/components/schemas/EventEnvelope"
-          }
-        }
-      },
-      "ExplorerSnapshot": {
-        "type": "object",
-        "description": "Read-only bounded operator projection containing sorted agents, retained session summaries, timeline events, lessons, system pressure, counters, policy, and explicit omission counts."
-      },
-      "MetacognitionSnapshot": {
-        "type": "object",
-        "description": "Deterministic read-only projection of visible progress, evidence, dependency, retry, stall, and consistency diagnostics."
-      },
-      "CoordinationPlan": {
-        "type": "object",
-        "description": "Deterministic read-only plan containing bounded assignments, interventions, held tasks, planning policies, and source-event provenance."
-      }
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same-origin daemon API"
     }
-  },
+  ],
   "x-meta-agent-event-kinds": [
     "agent_registered",
     "heartbeat",

@@ -42,6 +42,8 @@ required_paths = {
     "/api/v1/explorer",
     "/api/v1/metacognition",
     "/api/v1/snapshot",
+    "/api/v1/metacognition",
+    "/api/v1/coordination",
     "/healthz",
     "/readyz",
     "/metrics",

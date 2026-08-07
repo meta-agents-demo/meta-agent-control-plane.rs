@@ -26,9 +26,39 @@ Every assignment and intervention includes a deterministic ID, priority, public 
 
 Assignments are recommendations, not queue claims or distributed leases. A runtime that executes them must still apply its own authorization, concurrency, freshness, and idempotency controls. Rebuild the plan after accepted state changes rather than treating an old plan as an imperative command stream.
 
+## Protected API and operator page
+
+The daemon exposes the current default-policy plan through the existing read-authorization boundary:
+
+```bash
+curl --fail-with-body \
+  -H 'authorization: Bearer replace-with-at-least-16-bytes' \
+  http://127.0.0.1:8787/api/v1/coordination
+```
+
+The response is a `CoordinationPlan` for one coherent snapshot revision. The endpoint is read-only and performs no claims, mutations, dispatches, or provider calls.
+
+The Leptos operator page is available at:
+
+```text
+http://127.0.0.1:8787/coordination
+```
+
+The page shell is safe to serve without state authorization. Protected plan data is fetched only after the operator supplies the same read token used by the other operator views. The browser stores that token in `sessionStorage`, never `localStorage`; all rendered task IDs, agent IDs, rationale, recommendations, dependencies, and provenance are HTML-escaped before insertion.
+
+The page separates:
+
+- assignments and their action, priority, critical-path status, public rationale, and recommended next step;
+- interventions requiring graph or lifecycle repair;
+- held work and the explicit reason it was not assigned;
+- assignment-capacity suppression and independent hold/intervention truncation counts;
+- source-event retention status and stable comparison IDs.
+
 ## Plan freshness
 
 A plan is bound to the snapshot `revision` and `generated_at` values included in its JSON. Consumers must compare that revision with the current store before presenting an assignment as actionable. Any accepted event, operator correction, lease decision, or provider-status change invalidates the old plan for execution purposes and requires a rebuild. Stable assignment IDs support comparison and UI diffing; they are not authorization tokens or durable queue claims.
+
+The operator page refreshes the protected projection periodically and displays the revision and generation time. It intentionally does not offer an execute button. A future execution layer must use a distinct authorized command contract, compare the plan revision to current state, and acquire its own idempotent claim or lease before acting.
 
 ## Assignment precedence
 
@@ -121,15 +151,18 @@ The planner CLI does not accept an authentication token, provider credential, pr
 - global and per-agent assignment bounds are mandatory and non-zero;
 - HTTP policy overrides are authenticated, duplicate-free, and server-capped;
 - source event IDs are bounded and deduplicated;
+- protected JSON uses the established read-auth policy;
+- the static page embeds no protected state or credential;
+- browser rendering escapes all retained public text;
 - no hidden chain-of-thought is requested, reconstructed, or emitted.
 
 ## Test coverage
 
-Unit and integration tests exercise:
+Unit, integration, protocol, and runtime tests exercise:
 
 - dependency holds;
 - cycle intervention;
-- fair-share assignment across agents;
+- fair-share selection across agents;
 - retry-loop priority over stall recovery;
 - offline-agent holds;
 - explicit blocker recovery;
@@ -139,3 +172,10 @@ Unit and integration tests exercise:
 - auth-before-query parsing;
 - custom HTTP policy projection;
 - zero, excessive, duplicate, unknown, and non-integer HTTP policy rejection.
+- protected API authorization and deterministic repeated reads;
+- static-page state isolation;
+- composed overview, metacognition, and coordination routes;
+- checked-in and runtime OpenAPI path/schema alignment;
+- session-only token storage and forbidden browser constructs;
+- JavaScript syntax;
+- production OCI boot as a read-only, non-root process.
