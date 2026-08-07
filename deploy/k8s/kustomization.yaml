@@ -4,3 +4,5 @@ resources:
   - secrets.externalsecret.yaml
   - fleet.yaml
   - networkpolicy.yaml
+patches:
+  - path: hardening-patch.yaml
