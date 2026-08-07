@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: meta-agent-control-plane-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: meta-agent-fleet
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: meta-agents
+      ports:
+        - protocol: TCP
+          port: 8787
