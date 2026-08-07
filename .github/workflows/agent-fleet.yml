@@ -8,10 +8,12 @@ on:
       - scripts/fleet/**
       - tests/test_agent_fleet.py
       - tests/test_real_agent_introspection.py
+      - tests/test_scoped_dispatcher.py
       - Dockerfile.agent-runner
       - compose.agents.yaml
       - .env.agent-runner.example
       - docs/agent-fleet.md
+      - docs/scoped-task-dispatcher.md
       - .github/workflows/agent-fleet.yml
   push:
     branches: [main]
@@ -21,10 +23,12 @@ on:
       - scripts/fleet/**
       - tests/test_agent_fleet.py
       - tests/test_real_agent_introspection.py
+      - tests/test_scoped_dispatcher.py
       - Dockerfile.agent-runner
       - compose.agents.yaml
       - .env.agent-runner.example
       - docs/agent-fleet.md
+      - docs/scoped-task-dispatcher.md
       - .github/workflows/agent-fleet.yml
   workflow_dispatch:
 
@@ -45,16 +49,16 @@ jobs:
           persist-credentials: false
       - name: Compile and run standard-library tests
         run: |
-          python3 -m py_compile scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py tests/test_agent_fleet.py tests/test_real_agent_introspection.py
-          python3 -m unittest -v tests/test_agent_fleet.py tests/test_real_agent_introspection.py
+          python3 -m py_compile scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py tests/test_agent_fleet.py tests/test_real_agent_introspection.py tests/test_scoped_dispatcher.py
+          python3 -m unittest -v tests/test_agent_fleet.py tests/test_real_agent_introspection.py tests/test_scoped_dispatcher.py
       - name: Reject credential-shaped values in tracked fleet files
         shell: bash
         run: |
           set -euo pipefail
           if grep -RInE 'sk-(svcacct|ant-api|proj)-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|lin_api_[A-Za-z0-9]{16,}' \
             scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py \
-            tests/test_agent_fleet.py tests/test_real_agent_introspection.py \
-            Dockerfile.agent-runner compose.agents.yaml .env.agent-runner.example docs/agent-fleet.md; then
+            tests/test_agent_fleet.py tests/test_real_agent_introspection.py tests/test_scoped_dispatcher.py \
+            Dockerfile.agent-runner compose.agents.yaml .env.agent-runner.example docs/agent-fleet.md docs/scoped-task-dispatcher.md; then
             echo 'credential-shaped value found' >&2
             exit 1
           fi
@@ -64,7 +68,7 @@ jobs:
           set -euo pipefail
           if grep -RInE 'fake[ _-]agent|dummy[ _-]task|mock[ _-]task|seed[ _-](agent|task)' \
             scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet Dockerfile.agent-runner \
-            compose.agents.yaml docs/agent-fleet.md; then
+            compose.agents.yaml docs/agent-fleet.md docs/scoped-task-dispatcher.md; then
             echo 'production simulation path found' >&2
             exit 1
           fi
@@ -75,6 +79,7 @@ jobs:
           export OPENAI_API_KEY_FILE=/tmp/openai
           export ANTHROPIC_API_KEY_FILE=/tmp/anthropic
           export GH_TOKEN_FILE=/tmp/github
+          export LINEAR_API_KEY_FILE=/tmp/linear
           export META_AGENT_AUTH_TOKEN_FILE=/tmp/control-plane
           export META_AGENT_AUTH_TOKEN=ci-control-plane-token-at-least-32-bytes
           export META_AGENT_CREDENTIAL_EXPIRES_AT=2099-01-01T00:00:00Z
@@ -88,8 +93,10 @@ jobs:
           services = value["services"]
           openai = services["agent-runner-openai"]
           anthropic = services["agent-runner-anthropic"]
+          dispatcher = services["task-dispatcher"]
           openai_secrets = {item["source"] if isinstance(item, dict) else item for item in openai["secrets"]}
           anthropic_secrets = {item["source"] if isinstance(item, dict) else item for item in anthropic["secrets"]}
+          dispatcher_secrets = {item["source"] if isinstance(item, dict) else item for item in dispatcher["secrets"]}
           assert "anthropic_api_key" not in openai_secrets
           assert "openai_api_key" not in anthropic_secrets
           assert "ANTHROPIC_API_KEY_FILE" not in openai["environment"]
@@ -98,4 +105,9 @@ jobs:
           assert anthropic["environment"]["META_AGENT_PROVIDER_ALLOWLIST"] == "anthropic"
           assert openai["environment"]["META_AGENT_MCP_PROTOCOL_VERSION"] == "2026-07-28"
           assert anthropic["environment"]["META_AGENT_MCP_PROTOCOL_VERSION"] == "2026-07-28"
+          assert dispatcher_secrets == {"github_token", "linear_api_key"}
+          assert "OPENAI_API_KEY_FILE" not in dispatcher["environment"]
+          assert "ANTHROPIC_API_KEY_FILE" not in dispatcher["environment"]
+          assert dispatcher["environment"]["META_AGENT_GITHUB_ORGS"] == "apostille-me,embedded-alerts,evento-globolo,hacker-house-medellin"
+          assert dispatcher["environment"]["META_AGENT_LINEAR_PROJECTS"] == "github.com/apostille-me,github.com/embedded-alerts,github.com/evento-globolo,github.com/hacker-house-medellin"
           PY
