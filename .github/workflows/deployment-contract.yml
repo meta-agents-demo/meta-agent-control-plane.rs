@@ -1,0 +1,55 @@
+name: Deployment contract
+
+on:
+  pull_request:
+    paths:
+      - deploy/k8s/**
+      - .github/workflows/publish-images.yml
+      - .github/workflows/deployment-contract.yml
+  push:
+    branches: [main]
+    paths:
+      - deploy/k8s/**
+      - .github/workflows/publish-images.yml
+      - .github/workflows/deployment-contract.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Render namespace-scoped manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v kubectl
+          kubectl kustomize deploy/k8s > /tmp/meta-agent-fleet.yaml
+          test -s /tmp/meta-agent-fleet.yaml
+      - name: Enforce app/platform ownership and real-work scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq '^kind: (Namespace|ClusterRole|ClusterRoleBinding|CustomResourceDefinition|StorageClass)$' /tmp/meta-agent-fleet.yaml; then
+            echo 'cluster-scoped or platform-owned resource found in app manifests' >&2
+            exit 1
+          fi
+          ! grep -Eq '^ *stringData:' /tmp/meta-agent-fleet.yaml
+          grep -Fq 'serviceAccountName: meta-agents' /tmp/meta-agent-fleet.yaml
+          grep -Fq 'automountServiceAccountToken: false' /tmp/meta-agent-fleet.yaml
+          grep -Fq 'apostille-me,embedded-alerts,evento-globolo,hacker-house-medellin' /tmp/meta-agent-fleet.yaml
+          grep -Fq 'github.com/apostille-me,github.com/embedded-alerts,github.com/evento-globolo,github.com/hacker-house-medellin' /tmp/meta-agent-fleet.yaml
+      - name: Reject tracked credential material
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'sk-(svcacct|ant-api|proj)-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|lin_api_[A-Za-z0-9]{16,}' deploy/k8s .github/workflows/publish-images.yml; then
+            echo 'credential-shaped value found' >&2
+            exit 1
+          fi
