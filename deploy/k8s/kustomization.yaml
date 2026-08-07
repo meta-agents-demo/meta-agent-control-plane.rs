@@ -1,4 +1,5 @@
 # Namespace-scoped application resources only; tenant/Argo ownership stays in k8s-cluster.
+# Provider and dispatcher Secret volumes are item-projected to least privilege.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
