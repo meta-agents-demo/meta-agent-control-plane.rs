@@ -1,0 +1,112 @@
+services:
+  agent-runner-openai:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-runner
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.146.1}
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.220}
+    image: meta-agent-runner:local
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PYTHONUNBUFFERED: "1"
+      META_AGENT_STATE_DIR: /var/lib/meta-agent-runner
+      META_AGENT_RUNNER_HOME: /var/lib/meta-agent-runner/home
+      META_AGENT_RUNTIME_URL: http://control-plane:8787
+      META_AGENT_PROVIDER_ALLOWLIST: openai
+      META_AGENT_MAX_CONCURRENCY: ${META_AGENT_OPENAI_MAX_CONCURRENCY:-4}
+      META_AGENT_RESUME_PAUSED: "true"
+      META_AGENT_KEEP_RAW_LOGS: "false"
+      META_AGENT_EVENTS_ENABLED: "true"
+      META_AGENT_REQUIRE_EVENT_INGEST: "true"
+      META_AGENT_CREDENTIAL_EXPIRES_AT: ${META_AGENT_CREDENTIAL_EXPIRES_AT:?set the temporary credential expiry}
+      META_AGENT_OPENAI_RETRY_SECONDS: ${META_AGENT_OPENAI_RETRY_SECONDS:-1800}
+      META_AGENT_ANTHROPIC_DISCOVER_MANAGED_AGENTS: "false"
+      META_AGENT_MCP_SERVERS_JSON: '[{"name":"openai_docs","url":"https://developers.openai.com/mcp"}]'
+      META_AGENT_MCP_ALLOWED_HOSTS: developers.openai.com
+      META_AGENT_MCP_PROTOCOL_VERSION: "2026-07-28"
+      META_AGENT_MCP_LEGACY_PROTOCOL_VERSION: "2025-11-25"
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+      GH_TOKEN_FILE: /run/secrets/github_token
+      META_AGENT_AUTH_TOKEN_FILE: /run/secrets/control_plane_token
+    secrets:
+      - openai_api_key
+      - github_token
+      - control_plane_token
+    volumes:
+      - agent-runner-openai-state:/var/lib/meta-agent-runner
+    depends_on:
+      control-plane:
+        condition: service_started
+    stop_grace_period: 45s
+    restart: unless-stopped
+
+  agent-runner-anthropic:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-runner
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.146.1}
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.220}
+    image: meta-agent-runner:local
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PYTHONUNBUFFERED: "1"
+      META_AGENT_STATE_DIR: /var/lib/meta-agent-runner
+      META_AGENT_RUNNER_HOME: /var/lib/meta-agent-runner/home
+      META_AGENT_RUNTIME_URL: http://control-plane:8787
+      META_AGENT_PROVIDER_ALLOWLIST: anthropic
+      META_AGENT_MAX_CONCURRENCY: ${META_AGENT_ANTHROPIC_MAX_CONCURRENCY:-4}
+      META_AGENT_RESUME_PAUSED: "true"
+      META_AGENT_KEEP_RAW_LOGS: "false"
+      META_AGENT_EVENTS_ENABLED: "true"
+      META_AGENT_REQUIRE_EVENT_INGEST: "true"
+      META_AGENT_CREDENTIAL_EXPIRES_AT: ${META_AGENT_CREDENTIAL_EXPIRES_AT:?set the temporary credential expiry}
+      META_AGENT_ANTHROPIC_RETRY_SECONDS: ${META_AGENT_ANTHROPIC_RETRY_SECONDS:-21600}
+      META_AGENT_ANTHROPIC_DISCOVER_MANAGED_AGENTS: "true"
+      META_AGENT_MCP_SERVERS_JSON: '[{"name":"openai_docs","url":"https://developers.openai.com/mcp"}]'
+      META_AGENT_MCP_ALLOWED_HOSTS: developers.openai.com
+      META_AGENT_MCP_PROTOCOL_VERSION: "2026-07-28"
+      META_AGENT_MCP_LEGACY_PROTOCOL_VERSION: "2025-11-25"
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      GH_TOKEN_FILE: /run/secrets/github_token
+      META_AGENT_AUTH_TOKEN_FILE: /run/secrets/control_plane_token
+    secrets:
+      - anthropic_api_key
+      - github_token
+      - control_plane_token
+    volumes:
+      - agent-runner-anthropic-state:/var/lib/meta-agent-runner
+    depends_on:
+      control-plane:
+        condition: service_started
+    stop_grace_period: 45s
+    restart: unless-stopped
+
+secrets:
+  openai_api_key:
+    file: ${OPENAI_API_KEY_FILE:?set OPENAI_API_KEY_FILE to a chmod-600 file}
+  anthropic_api_key:
+    file: ${ANTHROPIC_API_KEY_FILE:?set ANTHROPIC_API_KEY_FILE to a chmod-600 file}
+  github_token:
+    file: ${GH_TOKEN_FILE:?set GH_TOKEN_FILE to a chmod-600 file}
+  control_plane_token:
+    file: ${META_AGENT_AUTH_TOKEN_FILE:?set META_AGENT_AUTH_TOKEN_FILE to a chmod-600 file}
+
+volumes:
+  agent-runner-openai-state:
+  agent-runner-anthropic-state:

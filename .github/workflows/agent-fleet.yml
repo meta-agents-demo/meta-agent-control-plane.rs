@@ -1,0 +1,101 @@
+name: Agent fleet contract
+
+on:
+  pull_request:
+    paths:
+      - scripts/agent_fleet.py
+      - scripts/agent_observe.py
+      - scripts/fleet/**
+      - tests/test_agent_fleet.py
+      - tests/test_real_agent_introspection.py
+      - Dockerfile.agent-runner
+      - compose.agents.yaml
+      - .env.agent-runner.example
+      - docs/agent-fleet.md
+      - .github/workflows/agent-fleet.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/agent_fleet.py
+      - scripts/agent_observe.py
+      - scripts/fleet/**
+      - tests/test_agent_fleet.py
+      - tests/test_real_agent_introspection.py
+      - Dockerfile.agent-runner
+      - compose.agents.yaml
+      - .env.agent-runner.example
+      - docs/agent-fleet.md
+      - .github/workflows/agent-fleet.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Compile and run standard-library tests
+        run: |
+          python3 -m py_compile scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py tests/test_agent_fleet.py tests/test_real_agent_introspection.py
+          python3 -m unittest -v tests/test_agent_fleet.py tests/test_real_agent_introspection.py
+      - name: Reject credential-shaped values in tracked fleet files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'sk-(svcacct|ant-api|proj)-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|lin_api_[A-Za-z0-9]{16,}' \
+            scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py \
+            tests/test_agent_fleet.py tests/test_real_agent_introspection.py \
+            Dockerfile.agent-runner compose.agents.yaml .env.agent-runner.example docs/agent-fleet.md; then
+            echo 'credential-shaped value found' >&2
+            exit 1
+          fi
+      - name: Reject production simulation paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'fake[ _-]agent|dummy[ _-]task|mock[ _-]task|seed[ _-](agent|task)' \
+            scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet Dockerfile.agent-runner \
+            compose.agents.yaml docs/agent-fleet.md; then
+            echo 'production simulation path found' >&2
+            exit 1
+          fi
+      - name: Validate provider-isolated Compose model without secret values
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OPENAI_API_KEY_FILE=/tmp/openai
+          export ANTHROPIC_API_KEY_FILE=/tmp/anthropic
+          export GH_TOKEN_FILE=/tmp/github
+          export META_AGENT_AUTH_TOKEN_FILE=/tmp/control-plane
+          export META_AGENT_AUTH_TOKEN=ci-control-plane-token-at-least-32-bytes
+          export META_AGENT_CREDENTIAL_EXPIRES_AT=2099-01-01T00:00:00Z
+          docker compose -f compose.yaml -f compose.agents.yaml config --quiet
+          docker compose -f compose.yaml -f compose.agents.yaml config --format json > /tmp/meta-agent-compose.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          value = json.loads(Path("/tmp/meta-agent-compose.json").read_text())
+          services = value["services"]
+          openai = services["agent-runner-openai"]
+          anthropic = services["agent-runner-anthropic"]
+          openai_secrets = {item["source"] if isinstance(item, dict) else item for item in openai["secrets"]}
+          anthropic_secrets = {item["source"] if isinstance(item, dict) else item for item in anthropic["secrets"]}
+          assert "anthropic_api_key" not in openai_secrets
+          assert "openai_api_key" not in anthropic_secrets
+          assert "ANTHROPIC_API_KEY_FILE" not in openai["environment"]
+          assert "OPENAI_API_KEY_FILE" not in anthropic["environment"]
+          assert openai["environment"]["META_AGENT_PROVIDER_ALLOWLIST"] == "openai"
+          assert anthropic["environment"]["META_AGENT_PROVIDER_ALLOWLIST"] == "anthropic"
+          assert openai["environment"]["META_AGENT_MCP_PROTOCOL_VERSION"] == "2026-07-28"
+          assert anthropic["environment"]["META_AGENT_MCP_PROTOCOL_VERSION"] == "2026-07-28"
+          PY
