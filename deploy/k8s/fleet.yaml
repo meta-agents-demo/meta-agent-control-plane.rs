@@ -162,7 +162,7 @@ spec:
             capabilities:
               drop: [ALL]
           volumeMounts:
-            - { name: runtime-secrets, mountPath: /run/secrets, readOnly: true }
+            - { name: openai-secrets, mountPath: /run/secrets, readOnly: true }
             - { name: openai-state, mountPath: /var/lib/meta-agent-runner }
             - { name: openai-tmp, mountPath: /tmp }
 
@@ -201,7 +201,7 @@ spec:
             capabilities:
               drop: [ALL]
           volumeMounts:
-            - { name: runtime-secrets, mountPath: /run/secrets, readOnly: true }
+            - { name: anthropic-secrets, mountPath: /run/secrets, readOnly: true }
             - { name: anthropic-state, mountPath: /var/lib/meta-agent-runner }
             - { name: anthropic-tmp, mountPath: /tmp }
 
@@ -233,17 +233,35 @@ spec:
             capabilities:
               drop: [ALL]
           volumeMounts:
-            - { name: runtime-secrets, mountPath: /run/secrets, readOnly: true }
+            - { name: dispatcher-secrets, mountPath: /run/secrets, readOnly: true }
             - { name: linear-secret, mountPath: /run/linear, readOnly: true }
             - { name: openai-state, mountPath: /state/openai }
             - { name: anthropic-state, mountPath: /state/anthropic }
             - { name: dispatcher-state, mountPath: /state/dispatcher }
             - { name: dispatcher-tmp, mountPath: /tmp }
       volumes:
-        - name: runtime-secrets
+        - name: openai-secrets
           secret:
             secretName: meta-agent-runtime-secrets
             defaultMode: 0400
+            items:
+              - { key: openai_api_key, path: openai_api_key }
+              - { key: github_token, path: github_token }
+              - { key: control_plane_token, path: control_plane_token }
+        - name: anthropic-secrets
+          secret:
+            secretName: meta-agent-runtime-secrets
+            defaultMode: 0400
+            items:
+              - { key: anthropic_api_key, path: anthropic_api_key }
+              - { key: github_token, path: github_token }
+              - { key: control_plane_token, path: control_plane_token }
+        - name: dispatcher-secrets
+          secret:
+            secretName: meta-agent-runtime-secrets
+            defaultMode: 0400
+            items:
+              - { key: github_token, path: github_token }
         - name: linear-secret
           secret:
             secretName: meta-agent-linear-secret
