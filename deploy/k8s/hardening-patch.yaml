@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meta-agent-fleet
+spec:
+  template:
+    spec:
+      serviceAccountName: meta-agents
+      automountServiceAccountToken: false
