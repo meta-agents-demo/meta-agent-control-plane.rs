@@ -7,6 +7,7 @@ on:
       - scripts/agent_observe.py
       - scripts/fleet/**
       - tests/test_agent_fleet.py
+      - tests/test_real_agent_introspection.py
       - Dockerfile.agent-runner
       - compose.agents.yaml
       - .env.agent-runner.example
@@ -19,6 +20,7 @@ on:
       - scripts/agent_observe.py
       - scripts/fleet/**
       - tests/test_agent_fleet.py
+      - tests/test_real_agent_introspection.py
       - Dockerfile.agent-runner
       - compose.agents.yaml
       - .env.agent-runner.example
@@ -43,14 +45,15 @@ jobs:
           persist-credentials: false
       - name: Compile and run standard-library tests
         run: |
-          python3 -m py_compile scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py tests/test_agent_fleet.py
-          python3 -m unittest -v tests/test_agent_fleet.py
+          python3 -m py_compile scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py tests/test_agent_fleet.py tests/test_real_agent_introspection.py
+          python3 -m unittest -v tests/test_agent_fleet.py tests/test_real_agent_introspection.py
       - name: Reject credential-shaped values in tracked fleet files
         shell: bash
         run: |
           set -euo pipefail
           if grep -RInE 'sk-(svcacct|ant-api|proj)-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|lin_api_[A-Za-z0-9]{16,}' \
-            scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py tests/test_agent_fleet.py \
+            scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py \
+            tests/test_agent_fleet.py tests/test_real_agent_introspection.py \
             Dockerfile.agent-runner compose.agents.yaml .env.agent-runner.example docs/agent-fleet.md; then
             echo 'credential-shaped value found' >&2
             exit 1
