@@ -40,7 +40,10 @@ jobs:
             echo 'cluster-scoped or platform-owned resource found in app manifests' >&2
             exit 1
           fi
-          ! grep -Eq '^ *stringData:' /tmp/meta-agent-fleet.yaml
+          if grep -Eq '^ *stringData:' /tmp/meta-agent-fleet.yaml; then
+            echo 'plaintext Secret stringData found in rendered manifests' >&2
+            exit 1
+          fi
           grep -Fq 'serviceAccountName: meta-agents' /tmp/meta-agent-fleet.yaml
           grep -Fq 'automountServiceAccountToken: false' /tmp/meta-agent-fleet.yaml
           grep -Fq 'apostille-me,embedded-alerts,evento-globolo,hacker-house-medellin' /tmp/meta-agent-fleet.yaml
