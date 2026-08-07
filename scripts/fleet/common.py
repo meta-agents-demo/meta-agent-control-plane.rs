@@ -230,8 +230,8 @@ class Job:
         constraints = "\n".join(f"- {item}" for item in self.constraints) or "- Follow repository-local instructions and preserve unrelated work."
         return (
             "You are executing a real repository task, not a simulation. Follow every repository-local "
-            "agents.md/AGENTS.md instruction. Work only on the assigned branch. Never print, commit, "
-            "copy, or expose credentials. Never invent actions, tests, commits, pull requests, evidence, "
+            "agents.md/AGENTS.md instruction. Work only on the assigned branch. Never print, commit, or "
+            "copy credentials; never expose them. Never invent actions, tests, commits, pull requests, evidence, "
             "or outcomes. Do not force-push, rebase, reset, clean, stash, or delete unrelated work.\n\n"
             f"Public task title: {self.display_title}\nSuccess criteria:\n{criteria}\nConstraints:\n{constraints}\n\n"
             "After inspecting the repository, after implementation, and after validation, publish concise "
