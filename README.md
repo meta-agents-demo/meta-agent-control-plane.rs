@@ -130,6 +130,7 @@ curl --fail-with-body \
 The endpoint authenticates before parsing limits. Overrides apply only to that response, cannot mutate daemon configuration or store recency, and are independently capped by the server. Session summaries are derived only from currently retained recent events; absence from the response is never represented as historical absence.
 
 The page keeps the token in session storage, sends it only as a Bearer header or first same-origin `/ws/ui` message, coalesces newer revisions and lag-resync notices into bounded refetches, reconnects with capped exponential backoff, and retains a 30-second safety poll. Client filtering operates only on the already returned retained projection, and every dynamic value is escaped before HTML insertion. See [`docs/operator-explorer.md`](docs/operator-explorer.md) for retention semantics, ordering guarantees, limits, live-update behavior, and test coverage.
+Open `/coordination` for the Leptos operator view or read `GET /api/v1/coordination` with the configured read token. Both surfaces are advisory and read-only: they do not dispatch work, mutate task ownership, or call any provider. The same planner is available offline through `meta-agent-plan`; see [`docs/coordination-planner.md`](docs/coordination-planner.md) for policy limits and deterministic semantics.
 
 ## Bounded in-memory state
 
