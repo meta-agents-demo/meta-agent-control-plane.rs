@@ -9,11 +9,14 @@ on:
       - tests/test_agent_fleet.py
       - tests/test_real_agent_introspection.py
       - tests/test_scoped_dispatcher.py
+      - tests/test_paired_org_canary.py
       - Dockerfile.agent-runner
       - compose.agents.yaml
+      - compose.canary.yaml
       - .env.agent-runner.example
       - docs/agent-fleet.md
       - docs/scoped-task-dispatcher.md
+      - docs/test-org-canary.md
       - .github/workflows/agent-fleet.yml
   push:
     branches: [main]
@@ -24,11 +27,14 @@ on:
       - tests/test_agent_fleet.py
       - tests/test_real_agent_introspection.py
       - tests/test_scoped_dispatcher.py
+      - tests/test_paired_org_canary.py
       - Dockerfile.agent-runner
       - compose.agents.yaml
+      - compose.canary.yaml
       - .env.agent-runner.example
       - docs/agent-fleet.md
       - docs/scoped-task-dispatcher.md
+      - docs/test-org-canary.md
       - .github/workflows/agent-fleet.yml
   workflow_dispatch:
 
@@ -49,16 +55,24 @@ jobs:
           persist-credentials: false
       - name: Compile and run standard-library tests
         run: |
-          python3 -m py_compile scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py tests/test_agent_fleet.py tests/test_real_agent_introspection.py tests/test_scoped_dispatcher.py
-          python3 -m unittest -v tests/test_agent_fleet.py tests/test_real_agent_introspection.py tests/test_scoped_dispatcher.py
+          python3 -m py_compile \
+            scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py \
+            tests/test_agent_fleet.py tests/test_real_agent_introspection.py \
+            tests/test_scoped_dispatcher.py tests/test_paired_org_canary.py
+          python3 -m unittest -v \
+            tests/test_agent_fleet.py tests/test_real_agent_introspection.py \
+            tests/test_scoped_dispatcher.py tests/test_paired_org_canary.py
       - name: Reject credential-shaped values in tracked fleet files
         shell: bash
         run: |
           set -euo pipefail
           if grep -RInE 'sk-(svcacct|ant-api|proj)-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|lin_api_[A-Za-z0-9]{16,}' \
             scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py \
-            tests/test_agent_fleet.py tests/test_real_agent_introspection.py tests/test_scoped_dispatcher.py \
-            Dockerfile.agent-runner compose.agents.yaml .env.agent-runner.example docs/agent-fleet.md docs/scoped-task-dispatcher.md; then
+            tests/test_agent_fleet.py tests/test_real_agent_introspection.py \
+            tests/test_scoped_dispatcher.py tests/test_paired_org_canary.py \
+            Dockerfile.agent-runner compose.agents.yaml compose.canary.yaml \
+            .env.agent-runner.example docs/agent-fleet.md \
+            docs/scoped-task-dispatcher.md docs/test-org-canary.md; then
             echo 'credential-shaped value found' >&2
             exit 1
           fi
@@ -68,7 +82,8 @@ jobs:
           set -euo pipefail
           if grep -RInE 'fake[ _-]agent|dummy[ _-]task|mock[ _-]task|seed[ _-](agent|task)' \
             scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet Dockerfile.agent-runner \
-            compose.agents.yaml docs/agent-fleet.md docs/scoped-task-dispatcher.md; then
+            compose.agents.yaml compose.canary.yaml docs/agent-fleet.md \
+            docs/scoped-task-dispatcher.md docs/test-org-canary.md; then
             echo 'production simulation path found' >&2
             exit 1
           fi
@@ -110,4 +125,28 @@ jobs:
           assert "ANTHROPIC_API_KEY_FILE" not in dispatcher["environment"]
           assert dispatcher["environment"]["META_AGENT_GITHUB_ORGS"] == "apostille-me,embedded-alerts,evento-globolo,hacker-house-medellin"
           assert dispatcher["environment"]["META_AGENT_LINEAR_PROJECTS"] == "github.com/apostille-me,github.com/embedded-alerts,github.com/evento-globolo,github.com/hacker-house-medellin"
+          PY
+      - name: Validate non-mutating paired test-org canary Compose model
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GH_TOKEN_FILE=/tmp/github
+          export LINEAR_API_KEY_FILE=/tmp/linear
+          docker compose -f compose.canary.yaml config --quiet
+          docker compose -f compose.canary.yaml config --format json > /tmp/meta-agent-canary-compose.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          value = json.loads(Path("/tmp/meta-agent-canary-compose.json").read_text())
+          service = value["services"]["paired-test-org-canary"]
+          secrets = {item["source"] if isinstance(item, dict) else item for item in service["secrets"]}
+          assert secrets == {"github_token", "linear_api_key"}
+          assert service["environment"]["META_AGENT_CANARY_GITHUB_ORGS"] == "apostille-me-test,embedded-alerts-test,evento-globolo-test,hacker-house-medellin-test"
+          assert service["environment"]["META_AGENT_CANARY_LINEAR_PROJECTS"] == "github.com/apostille-me-test,github.com/embedded-alerts-test,github.com/evento-globolo-test,github.com/hacker-house-medellin-test"
+          assert "OPENAI_API_KEY_FILE" not in service["environment"]
+          assert "ANTHROPIC_API_KEY_FILE" not in service["environment"]
+          assert not service.get("volumes")
+          assert service["restart"] == "no"
+          assert "fleet.canary" in " ".join(service["entrypoint"])
           PY
