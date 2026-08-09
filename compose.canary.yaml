@@ -1,0 +1,39 @@
+services:
+  paired-test-org-canary:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-runner
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.146.1}
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.220}
+    image: meta-agent-runner:local
+    init: true
+    read_only: true
+    working_dir: /opt/meta-agent
+    entrypoint: ["/usr/bin/tini", "--", "python3", "-m", "fleet.canary"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      META_AGENT_PROVIDER_ALLOWLIST: openai,anthropic
+      META_AGENT_CANARY_GITHUB_ORGS: apostille-me-test,embedded-alerts-test,evento-globolo-test,hacker-house-medellin-test
+      META_AGENT_CANARY_LINEAR_PROJECTS: github.com/apostille-me-test,github.com/embedded-alerts-test,github.com/evento-globolo-test,github.com/hacker-house-medellin-test
+      META_AGENT_CANARY_LIMIT: ${META_AGENT_CANARY_LIMIT:-25}
+      META_AGENT_CANARY_MIN_JOBS: ${META_AGENT_CANARY_MIN_JOBS:-1}
+      META_AGENT_CANARY_REPORT_PATH: /tmp/meta-agent-canary-report.json
+      GH_TOKEN_FILE: /run/secrets/github_token
+      LINEAR_API_KEY_FILE: /run/secrets/linear_api_key
+    secrets:
+      - github_token
+      - linear_api_key
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+secrets:
+  github_token:
+    file: ${GH_TOKEN_FILE:?set GH_TOKEN_FILE to a chmod-600 file}
+  linear_api_key:
+    file: ${LINEAR_API_KEY_FILE:?set LINEAR_API_KEY_FILE to a chmod-600 file}

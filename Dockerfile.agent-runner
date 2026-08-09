@@ -1,0 +1,26 @@
+FROM node:22.18.0-bookworm-slim
+
+ARG CODEX_VERSION=0.146.1
+ARG CLAUDE_CODE_VERSION=2.1.220
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates gh git openssh-client python3 tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global \
+         "@openai/codex@${CODEX_VERSION}" \
+         "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+    && npm cache clean --force \
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin agent
+
+COPY --chown=agent:agent scripts/agent_fleet.py /opt/meta-agent/agent_fleet.py
+COPY --chown=agent:agent scripts/agent_observe.py /opt/meta-agent/agent_observe.py
+COPY --chown=agent:agent scripts/fleet /opt/meta-agent/fleet
+RUN chmod 0555 /opt/meta-agent/agent_fleet.py /opt/meta-agent/agent_observe.py \
+    && ln -s /opt/meta-agent/agent_observe.py /usr/local/bin/meta-agent-observe \
+    && mkdir -p /var/lib/meta-agent-runner \
+    && chown agent:agent /var/lib/meta-agent-runner
+
+USER 10001:10001
+WORKDIR /var/lib/meta-agent-runner
+ENTRYPOINT ["/usr/bin/tini", "--", "python3", "/opt/meta-agent/agent_fleet.py"]
+CMD ["run"]
