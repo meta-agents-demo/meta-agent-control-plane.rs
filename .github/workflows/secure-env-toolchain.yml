@@ -1,0 +1,48 @@
+name: Secure environment toolchain
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - flake.nix
+      - justfile
+      - .nix/devshell.nix
+      - .github/workflows/secure-env-toolchain.yml
+  push:
+    branches: [main]
+    paths:
+      - flake.nix
+      - justfile
+      - .nix/devshell.nix
+      - .github/workflows/secure-env-toolchain.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: secure-env-toolchain-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+        with:
+          persist-credentials: false
+
+      - name: Validate workflow syntax
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: .github/workflows/secure-env-toolchain.yml
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
+        with:
+          github_access_token: ${{ github.token }}
+
+      - name: Prove pinned ores-sops and just entry point
+        run: nix develop --no-write-lock-file --command just env-ci
