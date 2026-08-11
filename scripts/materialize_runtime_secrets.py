@@ -15,6 +15,7 @@ import json
 import os
 import re
 import stat
+import sys
 import tempfile
 from pathlib import Path
 from typing import Final
@@ -87,6 +88,29 @@ class MaterializationError(ValueError):
     """A safe, non-secret-bearing configuration error."""
 
 
+def _is_trusted_platform_alias(path: Path) -> bool:
+    """Allow only macOS's immutable compatibility aliases into /private.
+
+    macOS commonly returns temporary paths below ``/var`` even though ``/var``
+    is a root-owned compatibility symlink to ``/private/var``. Rejecting that
+    OS alias makes otherwise safe materialization impossible. The exact target
+    check keeps arbitrary parent symlinks fail-closed.
+    """
+
+    if sys.platform != "darwin":
+        return False
+    expected = {
+        Path("/tmp"): Path("/private/tmp"),
+        Path("/var"): Path("/private/var"),
+    }.get(path)
+    if expected is None:
+        return False
+    try:
+        return path.resolve(strict=True) == expected
+    except OSError:
+        return False
+
+
 def _assert_no_symlink(path: Path) -> None:
     """Reject a symlink at the path or any existing parent component."""
 
@@ -96,7 +120,7 @@ def _assert_no_symlink(path: Path) -> None:
             mode = candidate.lstat().st_mode
         except FileNotFoundError:
             continue
-        if stat.S_ISLNK(mode):
+        if stat.S_ISLNK(mode) and not _is_trusted_platform_alias(candidate):
             raise MaterializationError(f"managed path must not be a symlink: {candidate}")
 
 
