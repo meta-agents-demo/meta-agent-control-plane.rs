@@ -106,20 +106,28 @@ jobs:
           fi
           docker compose --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml config --quiet
           docker compose --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml config --format json > /tmp/meta-agents-compose.json
+          docker compose --profile production-mutation --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml config --format json > /tmp/meta-agents-compose-mutation.json
           python3 - <<'PY'
           import json
           from pathlib import Path
 
-          model = json.loads(Path("/tmp/meta-agents-compose.json").read_text(encoding="utf-8"))
-          profiles = model["services"]["task-dispatcher"].get("profiles")
+          normal = json.loads(Path("/tmp/meta-agents-compose.json").read_text(encoding="utf-8"))
+          if "task-dispatcher" in normal["services"]:
+              raise SystemExit("task-dispatcher must be absent without the production-mutation profile")
+
+          admitted = json.loads(Path("/tmp/meta-agents-compose-mutation.json").read_text(encoding="utf-8"))
+          dispatcher = admitted["services"].get("task-dispatcher")
+          if dispatcher is None:
+              raise SystemExit("task-dispatcher must be present when production-mutation is selected")
+          profiles = dispatcher.get("profiles")
           if profiles != ["production-mutation"]:
               raise SystemExit(f"task-dispatcher must remain profile-gated, got: {profiles!r}")
           PY
-          if grep -Fq 'synthetic-control-plane-token-0001' /tmp/meta-agents-compose.json; then
+          if grep -Fq 'synthetic-control-plane-token-0001' /tmp/meta-agents-compose.json /tmp/meta-agents-compose-mutation.json; then
             echo 'secret value leaked into rendered Compose model' >&2
             exit 1
           fi
-          rm -f /tmp/meta-agents-compose.json
+          rm -f /tmp/meta-agents-compose.json /tmp/meta-agents-compose-mutation.json
 
       - name: Build and run the hardened control plane
         shell: bash
