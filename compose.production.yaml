@@ -1,0 +1,121 @@
+name: meta-agents-production
+
+services:
+  control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VCS_REF: ${META_AGENT_RELEASE_SHA:?set META_AGENT_RELEASE_SHA to the exact published commit}
+    image: ${META_AGENT_CONTROL_PLANE_IMAGE:?set META_AGENT_CONTROL_PLANE_IMAGE to the published sha256 digest}
+    # The image retains its direct binary entrypoint for normal OCI use. The
+    # production Compose path uses this audited adapter to load the shared
+    # token from a mounted file without placing its value in the Compose model.
+    entrypoint: ["/usr/local/bin/meta-agent-secret-entrypoint"]
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    group_add:
+      - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
+    pids_limit: 256
+    environment:
+      META_AGENT_HTTP_ADDR: 0.0.0.0:8787
+      META_AGENT_TCP_ADDR: 0.0.0.0:8788
+      META_AGENT_UDP_ADDR: 0.0.0.0:8789
+      META_AGENT_AUTH_TOKEN_FILE: /run/secrets/control_plane_token
+      META_AGENT_PROTECT_READ_API: "true"
+      META_AGENT_CORS_ANY: "false"
+      META_AGENT_LOG_JSON: "true"
+      META_AGENT_RUNTIME_DISCOVERY_ENABLED: ${META_AGENT_RUNTIME_DISCOVERY_ENABLED:-false}
+      META_AGENT_HOST_PROC_ROOT: /host/proc
+      META_AGENT_RUNTIME_SAMPLE_INTERVAL_MS: ${META_AGENT_RUNTIME_SAMPLE_INTERVAL_MS:-1000}
+      META_AGENT_PROCESS_PATTERNS: ${META_AGENT_PROCESS_PATTERNS:-claude,gemini,codex,chatgpt,openai}
+    secrets:
+      - control_plane_token
+    ports:
+      # Only the authenticated HTTP/UI surface is published by default. TCP
+      # and UDP remain available on the private Compose network.
+      - 127.0.0.1:${META_AGENT_HTTP_PORT:-8787}:8787/tcp
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "2", "http://127.0.0.1:8787/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    cpus: ${META_AGENT_CONTROL_PLANE_CPUS:-1.0}
+    mem_limit: ${META_AGENT_CONTROL_PLANE_MEMORY:-1g}
+    stop_grace_period: 30s
+    restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # These partial service definitions harden the fleet declared by
+  # compose.agents.yaml. Load compose.production.yaml last so these overrides
+  # win and provider runners wait for a healthy authenticated control plane.
+  # Both runners are profile-gated because a persisted queue can resume real
+  # repository mutation even when the dispatcher itself is stopped.
+  agent-runner-openai:
+    image: ${META_AGENT_RUNNER_IMAGE:?set META_AGENT_RUNNER_IMAGE to the published sha256 digest}
+    profiles: [production-workers, production-mutation]
+    group_add:
+      - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    pids_limit: ${META_AGENT_RUNNER_PIDS:-256}
+    cpus: ${META_AGENT_RUNNER_CPUS:-1.0}
+    mem_limit: ${META_AGENT_RUNNER_MEMORY:-2g}
+    restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  agent-runner-anthropic:
+    image: ${META_AGENT_RUNNER_IMAGE:?set META_AGENT_RUNNER_IMAGE to the published sha256 digest}
+    profiles: [production-workers, production-mutation]
+    group_add:
+      - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    pids_limit: ${META_AGENT_RUNNER_PIDS:-256}
+    cpus: ${META_AGENT_RUNNER_CPUS:-1.0}
+    mem_limit: ${META_AGENT_RUNNER_MEMORY:-2g}
+    restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # Real issue discovery and mutation is never part of a normal production-up.
+  # Selecting this profile also admits the two workers through their shared
+  # profile, so dispatcher dependencies remain explicit and deterministic.
+  task-dispatcher:
+    profiles: [production-mutation]
+    image: ${META_AGENT_RUNNER_IMAGE:?set META_AGENT_RUNNER_IMAGE to the published sha256 digest}
+    group_add:
+      - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
+    pids_limit: ${META_AGENT_DISPATCHER_PIDS:-128}
+    cpus: ${META_AGENT_DISPATCHER_CPUS:-0.5}
+    mem_limit: ${META_AGENT_DISPATCHER_MEMORY:-512m}
+    restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  control_plane_token:
+    file: ${META_AGENT_AUTH_TOKEN_FILE:?set META_AGENT_AUTH_TOKEN_FILE to a restricted file}

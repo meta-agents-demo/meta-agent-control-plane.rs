@@ -2,4 +2,27 @@
 .github
 .direnv
 target
+__pycache__
+*.py[cod]
+**/node_modules
+.npmrc
+**/.npmrc
+
+# Never send decrypted or encrypted operator environments into a persistent
+# Docker build context or image layer.
+env
+.sops.yaml
+.env
+.env.*
+*.env
+*/*.env
+*/**/*.env
+*.env.*
+
+# Local runtime state and evidence are not image inputs.
+tmp
+temp
+jobs
+runtime-snapshot.json
 *.log
+.DS_Store

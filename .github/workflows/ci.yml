@@ -95,6 +95,20 @@ jobs:
           META_AGENT_AUTH_TOKEN: ci-compose-token-at-least-32-bytes
         run: docker compose -f compose.yaml -f compose.linux.yaml config --quiet
 
+      - name: Prove pinned base images retain Linux multi-architecture indexes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t base_images < <(awk '$1 == "FROM" { print $2 }' Dockerfile Dockerfile.agent-runner)
+          test "${#base_images[@]}" -eq 3
+          for image in "${base_images[@]}"; do
+            docker buildx imagetools inspect --raw "$image" | jq -e '
+              [.manifests[] | select(.platform.os == "linux") | .platform.architecture] as $architectures
+              | (($architectures | index("amd64")) != null)
+                and (($architectures | index("arm64")) != null)
+            ' >/dev/null
+          done
+
       - name: Build the production image from the committed lockfile
         run: docker build --tag meta-agent-control-plane:ci .
 

@@ -3,14 +3,6 @@ name: Publish OCI images
 on:
   push:
     branches: [main]
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - src/**
-      - scripts/**
-      - Dockerfile
-      - Dockerfile.agent-runner
-      - .github/workflows/publish-images.yml
   workflow_dispatch:
 
 permissions:
@@ -23,13 +15,27 @@ concurrency:
 
 jobs:
   publish:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Check out exact commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+
+      - name: Validate exact publication head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          cargo fmt --all -- --check
+          cargo clippy --all-targets --all-features --locked -- -D warnings
+          cargo test --all-targets --all-features --locked
+          python3 -m unittest -v \
+            tests/test_materialize_runtime_secrets.py \
+            tests/test_secure_environment_cleanup.py
+          python3 scripts/ci/test_workflow_contract.py
 
       - name: Log in to GitHub Container Registry
         shell: bash
@@ -46,6 +52,7 @@ jobs:
           image="ghcr.io/meta-agents-demo/meta-agent-control-plane"
           docker build \
             --pull \
+            --build-arg VCS_REF="${GITHUB_SHA}" \
             --label org.opencontainers.image.source="https://github.com/meta-agents-demo/meta-agent-control-plane.rs" \
             --label org.opencontainers.image.revision="${GITHUB_SHA}" \
             --tag "${image}:${GITHUB_SHA}" \
@@ -61,6 +68,7 @@ jobs:
           image="ghcr.io/meta-agents-demo/meta-agent-runner"
           docker build \
             --pull \
+            --build-arg VCS_REF="${GITHUB_SHA}" \
             --label org.opencontainers.image.source="https://github.com/meta-agents-demo/meta-agent-control-plane.rs" \
             --label org.opencontainers.image.revision="${GITHUB_SHA}" \
             --tag "${image}:${GITHUB_SHA}" \
@@ -68,3 +76,37 @@ jobs:
             -f Dockerfile.agent-runner .
           docker push "${image}:${GITHUB_SHA}"
           docker push "${image}:main"
+
+      - name: Persist immutable release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          control_plane="ghcr.io/meta-agents-demo/meta-agent-control-plane:${GITHUB_SHA}"
+          runner="ghcr.io/meta-agents-demo/meta-agent-runner:${GITHUB_SHA}"
+          control_plane_digest="$(docker buildx imagetools inspect "$control_plane" --format '{{json .Manifest}}' | jq -r .digest)"
+          runner_digest="$(docker buildx imagetools inspect "$runner" --format '{{json .Manifest}}' | jq -r .digest)"
+          [[ "$control_plane_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$runner_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          docker pull "ghcr.io/meta-agents-demo/meta-agent-control-plane@${control_plane_digest}"
+          docker pull "ghcr.io/meta-agents-demo/meta-agent-runner@${runner_digest}"
+          jq -n \
+            --arg release_sha "$GITHUB_SHA" \
+            --arg control_plane "ghcr.io/meta-agents-demo/meta-agent-control-plane@${control_plane_digest}" \
+            --arg runner "ghcr.io/meta-agents-demo/meta-agent-runner@${runner_digest}" \
+            '{schema_version: 1, release_sha: $release_sha, control_plane_image: $control_plane, runner_image: $runner}' \
+            > release-manifest.json
+          {
+            echo '### Immutable release manifest'
+            echo
+            echo "- Release: \`$GITHUB_SHA\`"
+            echo "- Control plane: \`ghcr.io/meta-agents-demo/meta-agent-control-plane@${control_plane_digest}\`"
+            echo "- Runner: \`ghcr.io/meta-agents-demo/meta-agent-runner@${runner_digest}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable release manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: meta-agent-release-${{ github.sha }}
+          path: release-manifest.json
+          if-no-files-found: error
+          retention-days: 90
