@@ -4,8 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile.agent-runner
       args:
-        CODEX_VERSION: ${CODEX_VERSION:-0.146.1}
-        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.220}
         VCS_REF: ${META_AGENT_RELEASE_SHA:-development}
     image: meta-agent-runner:local
     init: true
@@ -54,8 +52,6 @@ services:
       context: .
       dockerfile: Dockerfile.agent-runner
       args:
-        CODEX_VERSION: ${CODEX_VERSION:-0.146.1}
-        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.220}
         VCS_REF: ${META_AGENT_RELEASE_SHA:-development}
     image: meta-agent-runner:local
     init: true
@@ -104,8 +100,6 @@ services:
       context: .
       dockerfile: Dockerfile.agent-runner
       args:
-        CODEX_VERSION: ${CODEX_VERSION:-0.146.1}
-        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.220}
         VCS_REF: ${META_AGENT_RELEASE_SHA:-development}
     image: meta-agent-runner:local
     init: true

@@ -11,6 +11,7 @@ on:
       - tests/test_scoped_dispatcher.py
       - tests/test_paired_org_canary.py
       - Dockerfile.agent-runner
+      - config/agent-runner/**
       - compose.agents.yaml
       - compose.canary.yaml
       - .env.agent-runner.example
@@ -29,6 +30,7 @@ on:
       - tests/test_scoped_dispatcher.py
       - tests/test_paired_org_canary.py
       - Dockerfile.agent-runner
+      - config/agent-runner/**
       - compose.agents.yaml
       - compose.canary.yaml
       - .env.agent-runner.example
@@ -70,7 +72,8 @@ jobs:
             scripts/agent_fleet.py scripts/agent_observe.py scripts/fleet/*.py \
             tests/test_agent_fleet.py tests/test_real_agent_introspection.py \
             tests/test_scoped_dispatcher.py tests/test_paired_org_canary.py \
-            Dockerfile.agent-runner compose.agents.yaml compose.canary.yaml \
+            Dockerfile.agent-runner config/agent-runner/package.json \
+            config/agent-runner/package-lock.json compose.agents.yaml compose.canary.yaml \
             .env.agent-runner.example docs/agent-fleet.md \
             docs/scoped-task-dispatcher.md docs/test-org-canary.md; then
             echo 'credential-shaped value found' >&2

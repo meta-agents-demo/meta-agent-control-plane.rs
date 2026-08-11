@@ -20,6 +20,7 @@ on:
       - .gitignore
       - Dockerfile
       - Dockerfile.agent-runner
+      - config/agent-runner/**
       - compose.production.yaml
       - compose.agents.yaml
       - config/runtime-env.example
@@ -27,6 +28,7 @@ on:
       - docs/agent-fleet.md
       - justfile
       - flake.nix
+      - flake.lock
       - scripts/control_plane_secret_entrypoint.sh
       - scripts/materialize_runtime_secrets.py
       - scripts/secure_environment_cleanup.sh
@@ -42,6 +44,7 @@ on:
       - .gitignore
       - Dockerfile
       - Dockerfile.agent-runner
+      - config/agent-runner/**
       - compose.production.yaml
       - compose.agents.yaml
       - config/runtime-env.example
@@ -49,6 +52,7 @@ on:
       - docs/agent-fleet.md
       - justfile
       - flake.nix
+      - flake.lock
       - scripts/control_plane_secret_entrypoint.sh
       - scripts/materialize_runtime_secrets.py
       - scripts/secure_environment_cleanup.sh
@@ -103,16 +107,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p env/dec nested/example
+          mkdir -p env/dec nested/example config/agent-runner/node_modules
           : > .env
           : > env/dec/dev.env
           : > nested/example/local.env.backup
+          : > config/agent-runner/.npmrc
+          : > config/agent-runner/node_modules/context-poison
           git check-ignore --no-index --quiet .env
           git check-ignore --no-index --quiet env/dec/dev.env
           git check-ignore --no-index --quiet nested/example/local.env.backup
+          git check-ignore --no-index --quiet config/agent-runner/.npmrc
+          git check-ignore --no-index --quiet config/agent-runner/node_modules/context-poison
           grep -Fxq 'env' .dockerignore
           grep -Fxq '.env' .dockerignore
           grep -Fxq '.sops.yaml' .dockerignore
+          grep -Fxq '**/node_modules' .dockerignore
+          grep -Fxq '**/.npmrc' .dockerignore
 
       - name: Generate synthetic runtime-only secret files
         shell: bash
@@ -260,6 +270,8 @@ jobs:
           compose_env=env/dec/runtime-secrets/dev/compose.env
           compose=(docker compose --profile production-mutation --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml)
           "${compose[@]}" build task-dispatcher
+          "${compose[@]}" run --rm --no-deps --entrypoint sh task-dispatcher -c \
+            'codex --version >/dev/null 2>&1 && claude --version >/dev/null 2>&1'
           scripts/verify_release_images.sh --skip-pull "$compose_env"
           "${compose[@]}" run --rm --no-deps \
             --entrypoint python3 task-dispatcher -c \

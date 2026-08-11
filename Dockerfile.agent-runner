@@ -1,18 +1,21 @@
-FROM node:22.18.0-bookworm-slim
+FROM node:22.18.0-bookworm-slim@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e
 
-ARG CODEX_VERSION=0.146.1
-ARG CLAUDE_CODE_VERSION=2.1.220
 ARG VCS_REF=unknown
 
 LABEL org.opencontainers.image.source="https://github.com/meta-agents-demo/meta-agent-control-plane.rs" \
       org.opencontainers.image.revision="${VCS_REF}"
 
+COPY config/agent-runner/package.json config/agent-runner/package-lock.json /opt/meta-agent-cli/
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates gh git openssh-client python3 tini \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --global \
-         "@openai/codex@${CODEX_VERSION}" \
-         "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+    && npm ci --prefix /opt/meta-agent-cli --omit=dev --include=optional --ignore-scripts --no-audit --no-fund \
+    && node /opt/meta-agent-cli/node_modules/@anthropic-ai/claude-code/install.cjs \
+    && ln -s /opt/meta-agent-cli/node_modules/.bin/codex /usr/local/bin/codex \
+    && ln -s /opt/meta-agent-cli/node_modules/.bin/claude /usr/local/bin/claude \
+    && codex --version >/dev/null 2>&1 \
+    && claude --version >/dev/null 2>&1 \
     && npm cache clean --force \
     && useradd --create-home --uid 10001 --shell /usr/sbin/nologin agent
 

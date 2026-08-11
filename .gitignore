@@ -3,6 +3,8 @@
 *.log
 __pycache__/
 *.py[cod]
+node_modules/
+.npmrc
 .DS_Store
 /tmp/
 /temp/

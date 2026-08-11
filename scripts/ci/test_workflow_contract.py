@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 import unittest
@@ -13,11 +14,21 @@ PRODUCTION_COMPOSE = ROOT / ".github/workflows/production-compose.yml"
 PRODUCTION_OVERLAY = ROOT / "compose.production.yaml"
 JUSTFILE = ROOT / "justfile"
 DOCKERFILE = ROOT / "Dockerfile"
+RUNNER_DOCKERFILE = ROOT / "Dockerfile.agent-runner"
+RUNNER_PACKAGE = ROOT / "config/agent-runner/package.json"
+RUNNER_LOCK = ROOT / "config/agent-runner/package-lock.json"
+FLAKE = ROOT / "flake.nix"
+FLAKE_LOCK = ROOT / "flake.lock"
 MAKEFILE = ROOT / "Makefile"
 NETWORK_TEST = ROOT / "tests/network_transport_conformance.rs"
 LOCKFILE = ROOT / "Cargo.lock"
 PINNED_ACTION = re.compile(r"uses:\s+[^@\s]+@[0-9a-f]{40}(?:\s+#.*)?$")
 PINNED_ACTIONLINT_IMAGE = re.compile(r"rhysd/actionlint@sha256:[0-9a-f]{64}")
+PINNED_BASE_IMAGE = re.compile(
+    r"^FROM [A-Za-z0-9._/-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}"
+    r"(?: AS [A-Za-z0-9_.-]+)?$"
+)
+EXACT_SEMVER = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
 
 
 class WorkflowContractTests(unittest.TestCase):
@@ -30,6 +41,7 @@ class WorkflowContractTests(unittest.TestCase):
         cls.production_overlay = PRODUCTION_OVERLAY.read_text(encoding="utf-8")
         cls.justfile = JUSTFILE.read_text(encoding="utf-8")
         cls.dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+        cls.runner_dockerfile = RUNNER_DOCKERFILE.read_text(encoding="utf-8")
         cls.makefile = MAKEFILE.read_text(encoding="utf-8")
         cls.network_test = NETWORK_TEST.read_text(encoding="utf-8")
 
@@ -90,6 +102,83 @@ class WorkflowContractTests(unittest.TestCase):
         ):
             with self.subTest(contract=contract):
                 self.assertIn(contract, self.ci)
+
+    def test_base_images_and_runner_cli_dependencies_are_immutable(self) -> None:
+        from_lines = [
+            line
+            for dockerfile in (self.dockerfile, self.runner_dockerfile)
+            for line in dockerfile.splitlines()
+            if line.startswith("FROM ")
+        ]
+        self.assertEqual(len(from_lines), 3)
+        for line in from_lines:
+            with self.subTest(line=line):
+                self.assertRegex(line, PINNED_BASE_IMAGE)
+
+        package = json.loads(RUNNER_PACKAGE.read_text(encoding="utf-8"))
+        lock = json.loads(RUNNER_LOCK.read_text(encoding="utf-8"))
+        dependencies = package["dependencies"]
+        self.assertEqual(
+            set(dependencies),
+            {"@anthropic-ai/claude-code", "@openai/codex"},
+        )
+        for name, version in dependencies.items():
+            with self.subTest(direct_dependency=name):
+                self.assertRegex(version, EXACT_SEMVER)
+        self.assertEqual(lock["lockfileVersion"], 3)
+        self.assertEqual(lock["packages"][""]["dependencies"], dependencies)
+        for name, version in dependencies.items():
+            self.assertEqual(lock["packages"][f"node_modules/{name}"]["version"], version)
+        for name, metadata in lock["packages"].items():
+            if not name:
+                continue
+            with self.subTest(package=name):
+                self.assertRegex(metadata.get("resolved", ""), r"^https://registry\.npmjs\.org/")
+                self.assertTrue(metadata.get("integrity", "").startswith("sha512-"))
+
+        for package_name in (
+            "@anthropic-ai/claude-code-linux-x64",
+            "@anthropic-ai/claude-code-linux-arm64",
+            "@openai/codex-linux-x64",
+            "@openai/codex-linux-arm64",
+        ):
+            with self.subTest(native_package=package_name):
+                metadata = lock["packages"][f"node_modules/{package_name}"]
+                self.assertTrue(metadata["optional"])
+                self.assertTrue(metadata["integrity"].startswith("sha512-"))
+
+        for contract in (
+            "npm ci --prefix /opt/meta-agent-cli --omit=dev --include=optional --ignore-scripts",
+            "node /opt/meta-agent-cli/node_modules/@anthropic-ai/claude-code/install.cjs",
+            "codex --version",
+            "claude --version",
+        ):
+            self.assertIn(contract, self.runner_dockerfile)
+        self.assertNotIn("npm install --global", self.runner_dockerfile)
+        self.assertNotIn("ARG CODEX_VERSION", self.runner_dockerfile)
+        self.assertNotIn("ARG CLAUDE_CODE_VERSION", self.runner_dockerfile)
+        self.assertIn("docker buildx imagetools inspect --raw", self.ci)
+
+    def test_nix_inputs_have_a_committed_content_lock(self) -> None:
+        flake = FLAKE.read_text(encoding="utf-8")
+        lock = json.loads(FLAKE_LOCK.read_text(encoding="utf-8"))
+        self.assertEqual(lock["version"], 7)
+        for input_name in ("nixpkgs", "ores-sops"):
+            revision = re.search(
+                rf'inputs\.{re.escape(input_name)}\.url\s*=\s*"github:[^/]+/[^/]+/([0-9a-f]{{40}})"',
+                flake,
+            )
+            self.assertIsNotNone(revision, input_name)
+            node = lock["nodes"][input_name]
+            self.assertEqual(node["locked"]["rev"], revision.group(1))
+            self.assertEqual(node["original"]["rev"], revision.group(1))
+
+        for name, node in lock["nodes"].items():
+            if "locked" not in node:
+                continue
+            with self.subTest(node=name):
+                self.assertRegex(node["locked"]["rev"], r"^[0-9a-f]{40}$")
+                self.assertTrue(node["locked"]["narHash"].startswith("sha256-"))
 
     def test_deep_conformance_is_scheduled_repeatable_and_locked(self) -> None:
         for contract in (

@@ -4,6 +4,9 @@
 target
 __pycache__
 *.py[cod]
+**/node_modules
+.npmrc
+**/.npmrc
 
 # Never send decrypted or encrypted operator environments into a persistent
 # Docker build context or image layer.

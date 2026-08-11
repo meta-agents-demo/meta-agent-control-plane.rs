@@ -33,5 +33,3 @@ META_AGENT_DISPATCH_INTERVAL_SECONDS=900
 META_AGENT_DISPATCH_LIMIT=12
 META_AGENT_GITHUB_ORGS=apostille-me,embedded-alerts,evento-globolo,hacker-house-medellin
 META_AGENT_LINEAR_PROJECTS=github.com/apostille-me,github.com/embedded-alerts,github.com/evento-globolo,github.com/hacker-house-medellin
-CODEX_VERSION=0.146.1
-CLAUDE_CODE_VERSION=2.1.220

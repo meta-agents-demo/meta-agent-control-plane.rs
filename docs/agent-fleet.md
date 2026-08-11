@@ -29,6 +29,8 @@ Both provider runners are disabled unless `production-workers` or `production-mu
 
 The control plane and provider runners run as non-root users. The root filesystem is read-only; writable state is limited to bounded tmpfs mounts and named state volumes. The authenticated HTTP/UI listener is published on loopback by default. TCP and UDP ingestion remain on the private Compose network.
 
+All three Docker base manifests are pinned by SHA-256. Codex and Claude Code are not installed from a floating global dependency graph: exact direct versions plus every platform package URL and integrity hash are committed in `config/agent-runner/package-lock.json`, installed with `npm ci`, and version-probed inside the built runner during the production contract. Updating either CLI requires a reviewed manifest/lock diff and a green runner-image contract.
+
 ## Credential boundary
 
 Provider, GitHub, Linear, and control-plane credentials are runtime Docker secrets. No credential value is copied into a Dockerfile, image layer, Compose model, repository, task ledger, hook, event, or provider transcript.

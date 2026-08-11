@@ -36,8 +36,6 @@ SECRET_FILES: Final = {
 # generated Compose env file after validation. Unknown keys are rejected so a
 # misspelled secret cannot silently land in plaintext output.
 PASSTHROUGH_KEYS: Final = {
-    "CLAUDE_CODE_VERSION",
-    "CODEX_VERSION",
     "META_AGENT_ANTHROPIC_MAX_CONCURRENCY",
     "META_AGENT_ANTHROPIC_RETRY_SECONDS",
     "META_AGENT_CONTROL_PLANE_IMAGE",

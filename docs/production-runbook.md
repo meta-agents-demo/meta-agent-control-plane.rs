@@ -7,13 +7,13 @@ This runbook is the promotion boundary for the Meta Agents control plane and the
 A production candidate must satisfy all of these conditions:
 
 1. `cargo fmt`, Clippy, Rust tests, protocol/dashboard contracts, and the existing OCI runtime contract pass at the exact candidate head.
-2. `just env-ci` proves the revision-pinned nixpkgs and `ores-sops` inputs, the Nix shell, the runtime-secret materializer, and the control-plane secret adapter. A reviewed `flake.lock` remains mandatory before final promotion.
+2. `just env-ci` proves the revision- and content-pinned nixpkgs and `ores-sops` inputs, the committed `flake.lock`, the Nix shell, the runtime-secret materializer, and the control-plane secret adapter.
 3. The hardened production Compose model renders using synthetic secrets and starts every service as UID 10001 with a read-only root, all capabilities dropped, `no-new-privileges`, bounded PID/memory/CPU settings, rotated logs, and only loopback HTTP published. The dispatcher image must also prove it can atomically write its fresh named volume.
 4. Secret payload files are mode 0640, share one deployment GID, and are readable only by the deployment account and the explicitly added container group. The generated path-only `compose.env` remains mode 0600.
 5. `.dockerignore` excludes `.env`, nested dotenv files, `.sops.yaml`, the complete `env` tree, and Python bytecode so plaintext cannot enter a persistent build layer.
 6. The exact candidate is exercised from `meta-agents-demo-test`; production mutation remains disabled until that organization and its GitHub App installation are verifiably available.
 7. Live OpenAI and Anthropic doctors pass from protected runtime secret files. Provider keys are not needed for the earlier gates.
-8. Production uses the two immutable `@sha256:` references recorded by the exact commit's `Publish OCI images` artifact; the pulled control-plane and runner OCI revision labels must also match the 40-character release SHA. Mutable tags and local worktree builds are not promotion inputs.
+8. Production uses the two immutable `@sha256:` references recorded by the exact commit's `Publish OCI images` artifact; the pulled control-plane and runner OCI revision labels must also match the 40-character release SHA. Mutable tags and local worktree builds are not promotion inputs. Every Docker base manifest is digest-pinned, and runner CLI dependency versions, tarball URLs, integrity hashes, optional platform binaries, and install scripts are captured by `config/agent-runner/package-lock.json` and installed with `npm ci`.
 
 ## One-time SOPS bootstrap
 

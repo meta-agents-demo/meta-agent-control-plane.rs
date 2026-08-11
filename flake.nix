@@ -1,7 +1,7 @@
 {
   description = "Meta-agent Rust daemon and Leptos control-plane development shell";
 
-  # Keep the shell reproducible even before a reviewed flake.lock is present.
+  # Exact revisions and the reviewed flake.lock jointly pin the shell inputs.
   inputs.nixpkgs.url =
     "github:NixOS/nixpkgs/2fcb964de67fcf60b43471c55d5d99e61a9ccb5a";
   inputs.ores-sops.url =
