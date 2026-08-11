@@ -1,0 +1,23 @@
+# Copy the variable names into `ores-sops edit prod`; do not commit values.
+# The five credentials must each contain at least 16 bytes.
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GH_TOKEN=
+LINEAR_API_KEY=
+META_AGENT_AUTH_TOKEN=
+
+# Temporary provider admission window. Must be future ISO-8601 with timezone.
+META_AGENT_CREDENTIAL_EXPIRES_AT=replace-with-bounded-future-ISO-8601-timestamp
+
+# Optional, non-secret production tuning.
+META_AGENT_HTTP_PORT=8787
+META_AGENT_OPENAI_MAX_CONCURRENCY=4
+META_AGENT_ANTHROPIC_MAX_CONCURRENCY=4
+META_AGENT_OPENAI_RETRY_SECONDS=1800
+META_AGENT_ANTHROPIC_RETRY_SECONDS=21600
+META_AGENT_DISPATCH_INTERVAL_SECONDS=900
+META_AGENT_DISPATCH_LIMIT=12
+META_AGENT_GITHUB_ORGS=apostille-me,embedded-alerts,evento-globolo,hacker-house-medellin
+META_AGENT_LINEAR_PROJECTS=github.com/apostille-me,github.com/embedded-alerts,github.com/evento-globolo,github.com/hacker-house-medellin
+CODEX_VERSION=0.146.1
+CLAUDE_CODE_VERSION=2.1.220

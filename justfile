@@ -4,12 +4,113 @@ set dotenv-load := false
 _default:
     @just --list --unsorted
 
-# Verify that the development shell exposes the exact organization-approved
-# secure-environment tool. This intentionally does not create recipients,
-# decrypt ciphertext, or invent repository-specific secret policy.
+# Verify the exact organization-approved secure-environment tool. This command
+# never creates recipients or decrypts ciphertext.
 env-toolchain:
+    mkdir -p env/dec
+    chmod 700 env/dec
     test "$(ores-sops --version)" = "ores-sops 0.3.1"
 
-# Evaluate the repository flake without writing an unreviewed lockfile.
+# Bootstrap canonical policy with the operator's local age identity. Review and
+# replace the pilot recipient sets before committing production policy.
+env-init: env-toolchain
+    mkdir -p env/enc env/dec
+    chmod 700 env/dec
+    ores-sops init
+
+# Decrypt and activate one canonical profile locally.
+env-use profile="dev": env-toolchain
+    case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
+    mkdir -p env/dec
+    chmod 700 env/dec
+    ores-sops use "{{profile}}"
+
+# Edit ciphertext through SOPS rather than maintaining durable plaintext.
+env-edit profile="dev": env-toolchain
+    case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
+    mkdir -p env/dec
+    chmod 700 env/dec
+    ores-sops edit "{{profile}}"
+
+# Encrypt the selected local plaintext after deliberate edits.
+env-encrypt profile="dev": env-toolchain
+    case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
+    mkdir -p env/dec
+    chmod 700 env/dec
+    ores-sops encrypt "{{profile}}"
+
+# Keyless policy verification; trusted release hosts additionally run env-use.
+env-verify: env-toolchain
+    mkdir -p env/dec
+    chmod 700 env/dec
+    ores-sops verify
+
+# Remove all generated runtime files and decrypted dotenv material.
+env-lock: env-toolchain
+    mkdir -p env/dec
+    chmod 700 env/dec
+    python3 scripts/materialize_runtime_secrets.py --profile dev --clean
+    python3 scripts/materialize_runtime_secrets.py --profile prod --clean
+    ores-sops lock
+    mkdir -p env/dec
+    chmod 700 env/dec
+
+# Convert an already decrypted profile into owner-only Docker secret files.
+runtime-secrets profile="prod": env-toolchain
+    case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
+    mkdir -p env/dec
+    chmod 700 env/dec
+    python3 scripts/materialize_runtime_secrets.py --profile "{{profile}}"
+
+# Run the complete non-provider production gate. This proves SOPS policy,
+# selected-profile decryption, runtime-secret generation, and Compose validity.
+production-preflight profile="prod": env-toolchain
+    case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
+    mkdir -p env/dec
+    chmod 700 env/dec
+    ores-sops verify
+    ores-sops use "{{profile}}"
+    python3 scripts/materialize_runtime_secrets.py --profile "{{profile}}"
+    docker compose \
+      --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" \
+      -f compose.production.yaml \
+      -f compose.agents.yaml \
+      config --quiet
+
+# Start the authenticated control plane, both provider runners, and dispatcher.
+production-up profile="prod":
+    just production-preflight "{{profile}}"
+    docker compose \
+      --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" \
+      -f compose.production.yaml \
+      -f compose.agents.yaml \
+      up --detach --build
+
+# Run live, sanitized provider capability checks. These are the only gates that
+# require valid OpenAI and Anthropic credentials.
+production-doctor profile="prod":
+    just production-preflight "{{profile}}"
+    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.production.yaml -f compose.agents.yaml run --rm agent-runner-openai doctor --provider openai
+    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.production.yaml -f compose.agents.yaml run --rm agent-runner-anthropic doctor --provider anthropic
+
+production-status profile="prod":
+    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.production.yaml -f compose.agents.yaml ps
+
+production-down profile="prod":
+    case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
+    compose_env="env/dec/runtime-secrets/{{profile}}/compose.env"; \
+      if test -f "$compose_env"; then \
+        docker compose --env-file "$compose_env" -f compose.production.yaml -f compose.agents.yaml down --remove-orphans; \
+      fi
+    python3 scripts/materialize_runtime_secrets.py --profile "{{profile}}" --clean
+    ores-sops lock
+    mkdir -p env/dec
+    chmod 700 env/dec
+
+# Credential-free checks used by public CI and the paired test-org harness.
 env-ci: env-toolchain
+    mkdir -p env/dec
+    chmod 700 env/dec
+    python3 -m unittest -v tests/test_materialize_runtime_secrets.py
+    sh -n scripts/control_plane_secret_entrypoint.sh
     nix flake check --no-write-lock-file -L

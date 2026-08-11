@@ -1,0 +1,168 @@
+name: Production Compose contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .dockerignore
+      - .gitattributes
+      - .gitignore
+      - Dockerfile
+      - compose.production.yaml
+      - compose.agents.yaml
+      - config/runtime-env.example
+      - docs/production-runbook.md
+      - justfile
+      - scripts/control_plane_secret_entrypoint.sh
+      - scripts/materialize_runtime_secrets.py
+      - tests/test_materialize_runtime_secrets.py
+      - .github/workflows/production-compose.yml
+  push:
+    branches: [main]
+    paths:
+      - .dockerignore
+      - .gitattributes
+      - .gitignore
+      - Dockerfile
+      - compose.production.yaml
+      - compose.agents.yaml
+      - config/runtime-env.example
+      - docs/production-runbook.md
+      - justfile
+      - scripts/control_plane_secret_entrypoint.sh
+      - scripts/materialize_runtime_secrets.py
+      - tests/test_materialize_runtime_secrets.py
+      - .github/workflows/production-compose.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-compose-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate local secret tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh -n scripts/control_plane_secret_entrypoint.sh
+          python3 -m py_compile scripts/materialize_runtime_secrets.py
+          python3 -m unittest -v tests/test_materialize_runtime_secrets.py
+
+      - name: Prove plaintext is excluded from Git and Docker contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p env/dec nested/example
+          : > .env
+          : > env/dec/prod.env
+          : > nested/example/local.env.backup
+          git check-ignore --no-index --quiet .env
+          git check-ignore --no-index --quiet env/dec/prod.env
+          git check-ignore --no-index --quiet nested/example/local.env.backup
+          grep -Fxq 'env' .dockerignore
+          grep -Fxq '.env' .dockerignore
+          grep -Fxq '.sops.yaml' .dockerignore
+          rm -rf env nested .env
+
+      - name: Generate synthetic runtime-only secret files
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 env/dec
+          cat > env/dec/prod.env <<'SYNTHETIC'
+          OPENAI_API_KEY=synthetic-openai-contract-key-0001
+          ANTHROPIC_API_KEY=synthetic-anthropic-contract-key-0001
+          GH_TOKEN=synthetic-github-contract-token-0001
+          LINEAR_API_KEY=synthetic-linear-contract-token-0001
+          META_AGENT_AUTH_TOKEN=synthetic-control-plane-token-0001
+          META_AGENT_CREDENTIAL_EXPIRES_AT=2099-01-01T00:00:00Z
+          META_AGENT_HTTP_PORT=18787
+          SYNTHETIC
+          chmod 600 env/dec/prod.env
+          python3 scripts/materialize_runtime_secrets.py --profile prod
+
+          compose_env=env/dec/runtime-secrets/prod/compose.env
+          test "$(stat -c '%a' "$compose_env")" = 600
+          if grep -Fq 'synthetic-control-plane-token-0001' "$compose_env"; then
+            echo 'secret value leaked into generated Compose env' >&2
+            exit 1
+          fi
+          docker compose --env-file "$compose_env" -f compose.production.yaml -f compose.agents.yaml config --quiet
+
+      - name: Build and run the hardened control plane
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose_env=env/dec/runtime-secrets/prod/compose.env
+          compose=(docker compose --env-file "$compose_env" -f compose.production.yaml -f compose.agents.yaml)
+          cleanup() {
+            "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
+            python3 scripts/materialize_runtime_secrets.py --profile prod --clean >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          "${compose[@]}" build control-plane
+          "${compose[@]}" up --detach control-plane
+          container_id="$("${compose[@]}" ps -q control-plane)"
+          test -n "$container_id"
+
+          healthy=false
+          for _ in $(seq 1 60); do
+            status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id")"
+            if test "$status" = healthy; then
+              healthy=true
+              break
+            fi
+            if test "$(docker inspect --format '{{.State.Running}}' "$container_id")" != true; then
+              docker logs "$container_id" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$healthy" = true
+
+          test "$(docker exec "$container_id" id -u)" = 10001
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container_id")" = true
+          test "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "$container_id")" = '["ALL"]'
+          test "$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$container_id")" = '["no-new-privileges:true"]'
+          test "$(docker inspect --format '{{index .Config.Entrypoint 0}}' "$container_id")" = '/usr/local/bin/meta-agent-secret-entrypoint'
+
+          environment="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container_id")"
+          grep -Fxq 'META_AGENT_AUTH_TOKEN_FILE=/run/secrets/control_plane_token' <<<"$environment"
+          if grep -q '^META_AGENT_AUTH_TOKEN=' <<<"$environment"; then
+            echo 'control-plane token leaked into container configuration metadata' >&2
+            exit 1
+          fi
+
+          base=http://127.0.0.1:18787
+          curl --fail --silent --show-error "$base/healthz" >/dev/null
+          curl --fail --silent --show-error "$base/readyz" >/dev/null
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$base/api/v1/snapshot")" = 401
+          token="$(cat env/dec/runtime-secrets/prod/control_plane_token)"
+          curl --fail --silent --show-error -H "authorization: Bearer $token" "$base/api/v1/snapshot" >/dev/null
+          unset token
+
+      - name: Prove generated plaintext is cleaned
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f env/dec/runtime-secrets/prod/compose.env; then
+            docker compose --env-file env/dec/runtime-secrets/prod/compose.env -f compose.production.yaml -f compose.agents.yaml down --remove-orphans || true
+          fi
+          python3 scripts/materialize_runtime_secrets.py --profile prod --clean || true
+          rm -f env/dec/prod.env
+          test ! -e env/dec/runtime-secrets/prod
+          git status --short
