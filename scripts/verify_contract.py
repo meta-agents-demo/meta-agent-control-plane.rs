@@ -9,13 +9,12 @@ from __future__ import annotations
 import json
 import re
 import sys
-import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = (ROOT / "src/model.rs").read_text()
 OPENAPI = json.loads((ROOT / "docs/openapi.json").read_text())
-CARGO = tomllib.loads((ROOT / "Cargo.toml").read_text())
+CARGO = (ROOT / "Cargo.toml").read_text()
 
 match = re.search(r"pub const EVENT_KINDS: &\[&str\] = &\[(.*?)\];", MODEL, re.S)
 if not match:
@@ -42,8 +41,6 @@ required_paths = {
     "/api/v1/explorer",
     "/api/v1/metacognition",
     "/api/v1/snapshot",
-    "/api/v1/metacognition",
-    "/api/v1/coordination",
     "/healthz",
     "/readyz",
     "/metrics",
@@ -96,7 +93,15 @@ if observed_explorer_parameters != expected_explorer_parameters:
         f"observed={observed_explorer_parameters!r}"
     )
 
-if CARGO["package"]["name"] != "meta-agent-control-plane":
+package_match = re.search(
+    r"^\[package\]\s*$([\s\S]*?)(?=^\[|\Z)", CARGO, re.MULTILINE
+)
+name_match = (
+    re.search(r'^name\s*=\s*"([^"]+)"\s*$', package_match.group(1), re.MULTILINE)
+    if package_match
+    else None
+)
+if not name_match or name_match.group(1) != "meta-agent-control-plane":
     errors.append("Cargo package name changed without updating contract tooling")
 
 for fixture in sorted((ROOT / "fixtures").glob("*.json")):

@@ -154,17 +154,11 @@ The planner CLI does not accept an authentication token, provider credential, pr
 - protected JSON uses the established read-auth policy;
 - the static page embeds no protected state or credential;
 - browser rendering escapes all retained public text;
-- source event IDs are bounded and deduplicated;
 - no hidden chain-of-thought is requested, reconstructed, or emitted.
 
 ## Test coverage
 
 Unit, integration, protocol, and runtime tests exercise:
-
-- dependency holds;
-- cycle intervention;
-- fair-share selection across agents;
-Unit and integration tests exercise:
 
 - dependency holds;
 - cycle intervention;
@@ -185,4 +179,3 @@ Unit and integration tests exercise:
 - session-only token storage and forbidden browser constructs;
 - JavaScript syntax;
 - production OCI boot as a read-only, non-root process.
-- fail-closed zero-capacity policy errors without snapshot echo.

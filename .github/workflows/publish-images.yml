@@ -1,0 +1,70 @@
+name: Publish OCI images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - src/**
+      - scripts/**
+      - Dockerfile
+      - Dockerfile.agent-runner
+      - .github/workflows/publish-images.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-meta-agent-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Log in to GitHub Container Registry
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Build and publish control plane
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/meta-agents-demo/meta-agent-control-plane"
+          docker build \
+            --pull \
+            --label org.opencontainers.image.source="https://github.com/meta-agents-demo/meta-agent-control-plane.rs" \
+            --label org.opencontainers.image.revision="${GITHUB_SHA}" \
+            --tag "${image}:${GITHUB_SHA}" \
+            --tag "${image}:main" \
+            -f Dockerfile .
+          docker push "${image}:${GITHUB_SHA}"
+          docker push "${image}:main"
+
+      - name: Build and publish isolated agent runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/meta-agents-demo/meta-agent-runner"
+          docker build \
+            --pull \
+            --label org.opencontainers.image.source="https://github.com/meta-agents-demo/meta-agent-control-plane.rs" \
+            --label org.opencontainers.image.revision="${GITHUB_SHA}" \
+            --tag "${image}:${GITHUB_SHA}" \
+            --tag "${image}:main" \
+            -f Dockerfile.agent-runner .
+          docker push "${image}:${GITHUB_SHA}"
+          docker push "${image}:main"

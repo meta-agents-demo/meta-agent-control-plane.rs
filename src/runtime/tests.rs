@@ -2,7 +2,6 @@ use std::{
     collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use chrono::Utc;
@@ -11,11 +10,10 @@ use uuid::Uuid;
 use super::*;
 
 fn temp_proc_root() -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root = env::temp_dir().join(format!("meta-agent-runtime-{suffix}"));
+    // Wall-clock nanoseconds are not guaranteed to be unique when Rust runs
+    // tests concurrently, especially on filesystems with coarser timestamp
+    // resolution. A UUID keeps each fixture isolated from sibling tests.
+    let root = env::temp_dir().join(format!("meta-agent-runtime-{}", Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
     root
 }

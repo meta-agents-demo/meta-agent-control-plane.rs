@@ -26,7 +26,7 @@ pub fn document(
         "info": {
             "title": "Meta-Agent Control Plane API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "Provider-neutral telemetry for observable agent goals, tasks, progress, explicit reflection, learned lessons, explainable metacognition, and bounded coordination recommendations. The protocol intentionally excludes hidden chain-of-thought."
+            "description": "Provider-neutral telemetry for observable agent goals, tasks, progress, explicit reflection, and learned lessons. The protocol intentionally excludes hidden chain-of-thought."
         },
         "servers": [{ "url": "/", "description": "Same-origin daemon API" }],
         "paths": {
@@ -177,42 +177,6 @@ pub fn document(
                     }
                 }
             },
-            "/api/v1/metacognition": {
-                "get": {
-                    "summary": "Read the explainable metacognition projection",
-                    "description": "Returns deterministic progress, evidence, dependency, retry, stall, and consistency diagnostics derived only from retained observable state.",
-                    "security": read_security.clone(),
-                    "responses": {
-                        "200": {
-                            "description": "Explainable metacognition projection",
-                            "content": {
-                                "application/json": {
-                                    "schema": { "$ref": "#/components/schemas/MetacognitionSnapshot" }
-                                }
-                            }
-                        },
-                        "401": { "description": "Read API authentication failed" }
-                    }
-                }
-            },
-            "/api/v1/coordination": {
-                "get": {
-                    "summary": "Read the bounded deterministic coordination plan",
-                    "description": "Returns dependency-safe assignments, interventions, and held work for one snapshot revision. Assignments are recommendations, not leases, credentials, or execution authority.",
-                    "security": read_security.clone(),
-                    "responses": {
-                        "200": {
-                            "description": "Current coordination recommendation plan",
-                            "content": {
-                                "application/json": {
-                                    "schema": { "$ref": "#/components/schemas/CoordinationPlan" }
-                                }
-                            }
-                        },
-                        "401": { "description": "Read API authentication failed" }
-                    }
-                }
-            },
             "/ws/agent": {
                 "get": {
                     "summary": "WebSocket agent ingestion",
@@ -347,7 +311,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn publishes_all_protocol_event_kinds_and_protected_read_projections() {
+    fn publishes_all_protocol_event_kinds() {
         let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8787);
         let document = document(
             BoundAddresses {

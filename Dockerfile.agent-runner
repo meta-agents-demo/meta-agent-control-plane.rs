@@ -13,8 +13,10 @@ RUN apt-get update \
     && useradd --create-home --uid 10001 --shell /usr/sbin/nologin agent
 
 COPY --chown=agent:agent scripts/agent_fleet.py /opt/meta-agent/agent_fleet.py
+COPY --chown=agent:agent scripts/agent_observe.py /opt/meta-agent/agent_observe.py
 COPY --chown=agent:agent scripts/fleet /opt/meta-agent/fleet
-RUN chmod 0555 /opt/meta-agent/agent_fleet.py \
+RUN chmod 0555 /opt/meta-agent/agent_fleet.py /opt/meta-agent/agent_observe.py \
+    && ln -s /opt/meta-agent/agent_observe.py /usr/local/bin/meta-agent-observe \
     && mkdir -p /var/lib/meta-agent-runner \
     && chown agent:agent /var/lib/meta-agent-runner
 
