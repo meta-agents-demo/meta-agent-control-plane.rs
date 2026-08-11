@@ -37,6 +37,7 @@ if test "$with_containers" = true; then
   compose_env="env/dec/runtime-secrets/$profile/compose.env"
   if test -f "$compose_env"; then
     docker compose \
+      --profile production-workers \
       --profile production-mutation \
       --env-file "$compose_env" \
       -f compose.agents.yaml \

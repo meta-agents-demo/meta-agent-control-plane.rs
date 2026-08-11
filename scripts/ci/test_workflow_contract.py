@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CI = ROOT / ".github/workflows/ci.yml"
 WORKFLOW_CONTRACT = ROOT / ".github/workflows/workflow-contract.yml"
 DEEP_CONFORMANCE = ROOT / ".github/workflows/deep-conformance.yml"
+PRODUCTION_COMPOSE = ROOT / ".github/workflows/production-compose.yml"
+PRODUCTION_OVERLAY = ROOT / "compose.production.yaml"
+JUSTFILE = ROOT / "justfile"
 DOCKERFILE = ROOT / "Dockerfile"
 MAKEFILE = ROOT / "Makefile"
 NETWORK_TEST = ROOT / "tests/network_transport_conformance.rs"
@@ -23,6 +26,9 @@ class WorkflowContractTests(unittest.TestCase):
         cls.ci = CI.read_text(encoding="utf-8")
         cls.contract = WORKFLOW_CONTRACT.read_text(encoding="utf-8")
         cls.deep = DEEP_CONFORMANCE.read_text(encoding="utf-8")
+        cls.production_compose = PRODUCTION_COMPOSE.read_text(encoding="utf-8")
+        cls.production_overlay = PRODUCTION_OVERLAY.read_text(encoding="utf-8")
+        cls.justfile = JUSTFILE.read_text(encoding="utf-8")
         cls.dockerfile = DOCKERFILE.read_text(encoding="utf-8")
         cls.makefile = MAKEFILE.read_text(encoding="utf-8")
         cls.network_test = NETWORK_TEST.read_text(encoding="utf-8")
@@ -40,19 +46,19 @@ class WorkflowContractTests(unittest.TestCase):
         )
 
     def test_all_repository_actions_are_immutable(self) -> None:
-        for workflow in (CI, WORKFLOW_CONTRACT, DEEP_CONFORMANCE):
+        for workflow in (CI, WORKFLOW_CONTRACT, DEEP_CONFORMANCE, PRODUCTION_COMPOSE):
             for line in workflow.read_text(encoding="utf-8").splitlines():
                 if "uses:" in line:
                     with self.subTest(workflow=workflow.name, line=line):
                         self.assertRegex(line.strip(), PINNED_ACTION)
 
     def test_checkout_never_persists_credentials(self) -> None:
-        for workflow in (self.ci, self.contract, self.deep):
+        for workflow in (self.ci, self.contract, self.deep, self.production_compose):
             self.assertIn("persist-credentials: false", workflow)
             self.assertNotIn("persist-credentials: true", workflow)
 
     def test_workflows_are_read_only_and_bounded(self) -> None:
-        for workflow in (self.ci, self.contract, self.deep):
+        for workflow in (self.ci, self.contract, self.deep, self.production_compose):
             self.assertIn("permissions:\n  contents: read", workflow)
             self.assertIn("timeout-minutes:", workflow)
             self.assertIn("cancel-in-progress: true", workflow)
@@ -130,6 +136,47 @@ class WorkflowContractTests(unittest.TestCase):
             "python3 -m unittest -v scripts/ci/test_workflow_contract.py",
             self.contract,
         )
+
+    def test_production_contract_is_reusable_and_pins_the_candidate(self) -> None:
+        for contract in (
+            "workflow_call:",
+            "candidate_sha:",
+            "required: true",
+            "repository: meta-agents-demo/meta-agent-control-plane.rs",
+            "EXPECTED_CANDIDATE_SHA:",
+            "^[0-9a-f]{40}$",
+            'test "$(git rev-parse HEAD)" = "$EXPECTED_CANDIDATE_SHA"',
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, self.production_compose)
+
+    def test_production_workers_and_dispatcher_are_explicitly_profile_gated(self) -> None:
+        self.assertEqual(
+            self.production_overlay.count(
+                "profiles: [production-workers, production-mutation]"
+            ),
+            2,
+        )
+        self.assertEqual(
+            self.production_overlay.count("profiles: [production-mutation]"),
+            1,
+        )
+        for contract in (
+            'up --detach --no-build --pull never control-plane',
+            'test "{{ acknowledgment }}" = "ENABLE_PROVIDER_WORKERS"',
+            'test "{{ acknowledgment }}" = "ENABLE_REAL_PRODUCTION_MUTATION"',
+            "--profile production-workers",
+            "--profile production-mutation",
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, self.justfile)
+        for assertion in (
+            'set(normal["services"]) != {"control-plane"}',
+            'set(workers["services"]) != expected_workers',
+            'set(admitted["services"]) != expected_admitted',
+        ):
+            with self.subTest(assertion=assertion):
+                self.assertIn(assertion, self.production_compose)
 
 
 if __name__ == "__main__":

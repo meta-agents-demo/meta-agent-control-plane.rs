@@ -1,6 +1,17 @@
 name: Production Compose contract
 
 on:
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Exact 40-character control-plane commit to certify
+        required: true
+        type: string
+      runner_label:
+        description: GitHub-hosted or approved self-hosted Linux runner label
+        required: false
+        default: ubuntu-24.04
+        type: string
   pull_request:
     branches: [main]
     paths:
@@ -56,13 +67,24 @@ concurrency:
 
 jobs:
   contract:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner_label || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - name: Check out without persisted credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          repository: meta-agents-demo/meta-agent-control-plane.rs
+          ref: ${{ inputs.candidate_sha || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Prove exact candidate checkout
+        shell: bash
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha || github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_CANDIDATE_SHA"
 
       - name: Validate local secret tooling
         shell: bash
@@ -123,16 +145,34 @@ jobs:
           fi
           docker compose --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml config --quiet
           docker compose --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml config --format json > /tmp/meta-agents-compose.json
+          docker compose --profile production-workers --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml config --format json > /tmp/meta-agents-compose-workers.json
           docker compose --profile production-mutation --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml config --format json > /tmp/meta-agents-compose-mutation.json
           python3 - <<'PY'
           import json
           from pathlib import Path
 
           normal = json.loads(Path("/tmp/meta-agents-compose.json").read_text(encoding="utf-8"))
-          if "task-dispatcher" in normal["services"]:
-              raise SystemExit("task-dispatcher must be absent without the production-mutation profile")
+          if set(normal["services"]) != {"control-plane"}:
+              raise SystemExit(
+                  "normal production startup must contain only control-plane, got: "
+                  f"{sorted(normal['services'])!r}"
+              )
+
+          workers = json.loads(Path("/tmp/meta-agents-compose-workers.json").read_text(encoding="utf-8"))
+          expected_workers = {"control-plane", "agent-runner-openai", "agent-runner-anthropic"}
+          if set(workers["services"]) != expected_workers:
+              raise SystemExit(
+                  "production-workers must admit exactly the control plane and two runners, got: "
+                  f"{sorted(workers['services'])!r}"
+              )
 
           admitted = json.loads(Path("/tmp/meta-agents-compose-mutation.json").read_text(encoding="utf-8"))
+          expected_admitted = expected_workers | {"task-dispatcher"}
+          if set(admitted["services"]) != expected_admitted:
+              raise SystemExit(
+                  "production-mutation must admit the full bounded topology, got: "
+                  f"{sorted(admitted['services'])!r}"
+              )
           dispatcher = admitted["services"].get("task-dispatcher")
           if dispatcher is None:
               raise SystemExit("task-dispatcher must be present when production-mutation is selected")
@@ -146,11 +186,11 @@ jobs:
                   if not service.get(key):
                       raise SystemExit(f"{name} lacks production bound: {key}")
           PY
-          if grep -Fq 'synthetic-control-plane-token-0001' /tmp/meta-agents-compose.json /tmp/meta-agents-compose-mutation.json; then
+          if grep -Fq 'synthetic-control-plane-token-0001' /tmp/meta-agents-compose.json /tmp/meta-agents-compose-workers.json /tmp/meta-agents-compose-mutation.json; then
             echo 'secret value leaked into rendered Compose model' >&2
             exit 1
           fi
-          rm -f /tmp/meta-agents-compose.json /tmp/meta-agents-compose-mutation.json
+          rm -f /tmp/meta-agents-compose.json /tmp/meta-agents-compose-workers.json /tmp/meta-agents-compose-mutation.json
 
       - name: Build and run the hardened control plane
         shell: bash

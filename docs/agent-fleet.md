@@ -17,13 +17,15 @@ The production topology is composed from two files in this order:
 -f compose.agents.yaml -f compose.production.yaml
 ```
 
-`compose.agents.yaml` declares the OpenAI runner, Anthropic runner, real-work dispatcher, isolated state volumes, and mounted secret names. `compose.production.yaml` is the final hardening overlay: it adds the authenticated control plane, read-only roots, dropped capabilities, `no-new-privileges`, resource and log limits, health-gated dependencies, supplementary secret-file group access, and the explicit mutation profile.
+`compose.agents.yaml` declares the OpenAI runner, Anthropic runner, real-work dispatcher, isolated state volumes, and mounted secret names. `compose.production.yaml` is the final hardening overlay: it adds the authenticated control plane, read-only roots, dropped capabilities, `no-new-privileges`, resource and log limits, health-gated dependencies, supplementary secret-file group access, and explicit worker/mutation profiles.
 
 The provider runners are separate services:
 
 - `agent-runner-openai` mounts only the OpenAI, GitHub, and control-plane credentials and admits only `provider: openai` jobs.
 - `agent-runner-anthropic` mounts only the Anthropic, GitHub, and control-plane credentials and admits only `provider: anthropic` jobs.
 - `task-dispatcher` mounts only GitHub and Linear credentials. It has no provider API key and is disabled unless the `production-mutation` profile is explicitly selected.
+
+Both provider runners are disabled unless `production-workers` or `production-mutation` is selected. This is intentional: stopping discovery alone is insufficient when a durable runner queue may already contain repository-changing work.
 
 The control plane and provider runners run as non-root users. The root filesystem is read-only; writable state is limited to bounded tmpfs mounts and named state volumes. The authenticated HTTP/UI listener is published on loopback by default. TCP and UDP ingestion remain on the private Compose network.
 
@@ -75,14 +77,20 @@ A missing, expired, invalid, unauthorized, quota-exhausted, or rate-limited prov
 
 ## Safe startup and explicit mutation admission
 
-Routine production startup reruns preflight and both live provider doctors, then starts only the already-verified control plane and provider runners with builds and implicit pulls disabled:
+Routine production startup reruns preflight and both live provider doctors, then starts only the already-verified control plane with builds and implicit pulls disabled:
 
 ```sh
 just production-up prod
 just production-status prod
 ```
 
-This does not start the real-work dispatcher. After public exact-head CI, the paired `meta-agents-demo-test` gate, SOPS recipient review, and both live doctors are green, an operator may explicitly admit real GitHub/Linear mutation:
+This does not start provider workers or the real-work dispatcher. To resume an already-reviewed provider queue without issue discovery, use:
+
+```sh
+just production-workers-up prod ENABLE_PROVIDER_WORKERS
+```
+
+After public exact-head CI, the paired `meta-agents-demo-test` gate, SOPS recipient review, and both live doctors are green, an operator may explicitly admit real GitHub/Linear mutation:
 
 ```sh
 just production-admit prod ENABLE_REAL_PRODUCTION_MUTATION
