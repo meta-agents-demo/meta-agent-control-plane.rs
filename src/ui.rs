@@ -23,11 +23,19 @@ pub fn dashboard(addresses: BoundAddresses, reads_protected: bool) -> String {
                         "A bounded, local-first view of agent goals, tasks, progress, explicit reflection, and learned lessons."
                     </p>
                 </div>
-                <div class="connection-card">
-                    <span id="live-indicator" class="indicator offline"></span>
-                    <div>
-                        <strong id="live-label">"Connecting"</strong>
-                        <small>{protection}</small>
+                <div class="hero-actions">
+                    <nav class="hero-nav" aria-label="Analytics views">
+                        <a href="/runtime">"Runtime"</a>
+                        <a href="/explorer">"Explorer"</a>
+                        <a href="/metacognition">"Metacognition"</a>
+                        <a href="/coordination">"Coordination"</a>
+                    </nav>
+                    <div class="connection-card">
+                        <span id="live-indicator" class="indicator offline"></span>
+                        <div>
+                            <strong id="live-label">"Connecting"</strong>
+                            <small>{protection}</small>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -106,6 +114,7 @@ pub fn dashboard(addresses: BoundAddresses, reads_protected: bool) -> String {
 
 const CSS: &str = r#"
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#edf3ff;background:#081019;--panel:#101b27;--line:#26384b;--muted:#91a5ba;--accent:#71e6c2;--blue:#6db5ff;--danger:#ff7285}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 12% 0,#17314b 0,transparent 35%),radial-gradient(circle at 95% 8%,#193d34 0,transparent 28%),#081019;color:#edf3ff}.shell{width:min(1480px,calc(100% - 32px));margin:0 auto;padding:34px 0 56px}.hero{display:flex;align-items:flex-start;justify-content:space-between;gap:28px;margin-bottom:24px}.eyebrow{margin:0 0 10px;color:var(--accent);font-size:.74rem;font-weight:800;letter-spacing:.18em}.hero h1{font-size:clamp(2.2rem,5vw,5.4rem);line-height:.94;max-width:900px;margin:0;letter-spacing:-.055em}.lede{max-width:770px;color:var(--muted);font-size:1.08rem;line-height:1.65}.panel{background:linear-gradient(155deg,rgba(21,35,51,.96),rgba(12,23,34,.96));border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.17)}.padded{padding:20px}.connection-card{min-width:190px;display:flex;align-items:center;gap:12px;padding:15px 17px;border:1px solid var(--line);background:rgba(9,19,29,.78);border-radius:14px}.connection-card strong,.connection-card small{display:block}.connection-card small{color:var(--muted);margin-top:3px}.indicator{width:11px;height:11px;border-radius:50%;display:inline-block;background:var(--danger);box-shadow:0 0 0 5px rgba(255,114,133,.09)}.indicator.online{background:var(--accent);box-shadow:0 0 0 5px rgba(113,230,194,.11)}.toolbar{display:grid;grid-template-columns:auto minmax(220px,1fr) auto auto minmax(180px,auto);align-items:center;gap:10px;padding:13px 15px;margin-bottom:16px}.toolbar label{color:var(--muted);font-size:.82rem;font-weight:700}.toolbar input{min-width:0;background:#09131e;border:1px solid var(--line);color:#edf3ff;border-radius:10px;padding:10px 12px}.toolbar button{border:0;border-radius:10px;background:var(--accent);color:#06120e;font-weight:800;padding:10px 14px;cursor:pointer}.toolbar button.secondary{background:#203449;color:#edf3ff}.muted{color:var(--muted);font-size:.84rem}.error-banner{background:rgba(255,114,133,.12);border:1px solid rgba(255,114,133,.45);color:#ffd7dd;padding:12px 16px;border-radius:12px;margin-bottom:16px}.hidden{display:none}.stat-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:16px}.stat{padding:17px}.stat span{display:block;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.08em}.stat strong{display:block;font-size:2rem;margin-top:8px}.two-column{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,.75fr);gap:16px;margin:16px 0}.section-title{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px}.section-title h2{margin:0;font-size:1.1rem}.section-title span{color:var(--muted);font-size:.78rem}.card-list,.cache-list,.event-stream{display:grid;gap:10px}.agent-card,.lesson-card,.cache-row,.event-row{padding:13px;background:rgba(7,16,25,.64);border:1px solid var(--line);border-radius:12px}.card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.card-head small,.micro{display:block;color:var(--muted);font-size:.76rem;margin-top:4px}.pill{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:4px 8px;color:#c9daf0;font-size:.7rem}.confidence{color:var(--accent);font-weight:800}.reflection{margin-top:10px;color:#c9daf0;font-size:.84rem;line-height:1.45}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:850px}th,td{text-align:left;padding:13px 10px;border-bottom:1px solid var(--line);font-size:.82rem}th{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}.task-title small{display:block;color:var(--muted);margin-top:4px}.bar{height:7px;background:#08131e;border-radius:999px;overflow:hidden}.bar span{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--accent));border-radius:999px}.progress-label{display:flex;justify-content:space-between;color:var(--muted);font-size:.72rem;margin-bottom:5px}.cache-row{display:grid;grid-template-columns:70px 1fr auto;gap:10px;align-items:center}.cache-row small{color:var(--muted)}.endpoint-list{display:grid;gap:10px}.endpoint-list div{display:grid;grid-template-columns:100px 1fr;gap:10px}.endpoint-list dt{color:var(--muted)}code{color:var(--accent);overflow-wrap:anywhere}.event-row{display:grid;grid-template-columns:165px 120px minmax(150px,.65fr) minmax(180px,1fr) auto;gap:12px;align-items:center;font-size:.78rem}.event-kind{color:var(--blue);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.empty-state{color:var(--muted);padding:18px 4px}.danger-text{color:#ff9aaa}@media(max-width:1000px){.stat-grid{grid-template-columns:repeat(3,1fr)}.two-column{grid-template-columns:1fr}.hero{display:block}.connection-card{margin-top:18px;width:max-content}.toolbar{grid-template-columns:1fr 1fr}.toolbar label,.toolbar input,.toolbar .muted{grid-column:1/-1}.event-row{grid-template-columns:1fr 1fr}}@media(max-width:620px){.shell{width:min(100% - 20px,1480px);padding-top:22px}.stat-grid{grid-template-columns:repeat(2,1fr)}.toolbar{display:flex;align-items:stretch;flex-direction:column}.hero h1{font-size:2.65rem}.section-title{display:block}}
+.hero-actions{display:grid;gap:12px;justify-items:end}.hero-nav{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.hero-nav a{color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:10px;padding:9px 13px}@media(max-width:1000px){.hero-actions{justify-items:start;margin-top:18px}.hero-nav{justify-content:flex-start}.connection-card{margin-top:0}}@media(max-width:620px){.hero-nav a{flex:1;text-align:center}.connection-card{width:100%}}
 "#;
 
 const SCRIPT: &str = r#"
@@ -258,5 +267,9 @@ mod tests {
         assert!(html.contains("Meta-Agent Control Plane"));
         assert!(html.contains("Learned lessons"));
         assert!(html.contains("/ws/ui"));
+        assert!(html.contains("href=\"/runtime\""));
+        assert!(html.contains("href=\"/explorer\""));
+        assert!(html.contains("href=\"/metacognition\""));
+        assert!(html.contains("href=\"/coordination\""));
     }
 }

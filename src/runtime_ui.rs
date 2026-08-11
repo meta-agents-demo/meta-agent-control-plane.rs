@@ -14,7 +14,7 @@ pub fn dashboard(reads_protected: bool) -> String {
                     <h2>"Runtime panels"</h2>
                     <p class="sidebar-copy">"Choose which real-data panels are visible. The selection stays in this browser."</p>
                 </div>
-                <nav>
+                <nav aria-label="Analytics views">
                     <a href="/">"Overview"</a>
                     <a href="/explorer">"Explorer"</a>
                     <a href="/metacognition">"Metacognition"</a>
@@ -145,6 +145,9 @@ mod tests {
         assert!(html.contains("data-panel-toggle=\"resources\""));
         assert!(html.contains("/api/v1/runtime/snapshot"));
         assert!(html.contains("No raw prompts"));
+        assert!(html.contains("href=\"/explorer\""));
+        assert!(html.contains("href=\"/metacognition\""));
+        assert!(html.contains("href=\"/coordination\""));
         assert!(!html.contains("Math.random"));
         assert!(!html.contains("meta-agent-read-token="));
     }

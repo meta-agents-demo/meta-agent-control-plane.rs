@@ -14,7 +14,7 @@ pub fn dashboard(reads_protected: bool) -> String {
                     <h1>"Coordination plan"</h1>
                     <p class="lede">"Dependency-safe assignments, operator interventions, and explicit holds derived deterministically from visible retained state."</p>
                 </div>
-                <nav><a href="/">"Overview"</a><a href="/metacognition">"Metacognition"</a></nav>
+                <nav aria-label="Analytics views"><a href="/">"Overview"</a><a href="/runtime">"Runtime"</a><a href="/explorer">"Explorer"</a><a href="/metacognition">"Metacognition"</a></nav>
             </header>
 
             <section class="toolbar panel">
@@ -84,5 +84,7 @@ mod tests {
         assert!(html.contains("stream-label"));
         assert!(html.contains("/api/v1/coordination"));
         assert!(html.contains("advisory and read-only"));
+        assert!(html.contains("href=\"/runtime\""));
+        assert!(html.contains("href=\"/explorer\""));
     }
 }
