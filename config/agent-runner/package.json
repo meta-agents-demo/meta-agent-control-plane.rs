@@ -5,6 +5,6 @@
   "description": "Locked provider CLI dependencies for the isolated Meta Agent runner image",
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.226",
-    "@openai/codex": "0.146.1"
+    "@openai/codex": "0.147.0"
   }
 }
