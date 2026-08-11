@@ -58,7 +58,10 @@ services:
   # These partial service definitions harden the fleet declared by
   # compose.agents.yaml. Load compose.production.yaml last so these overrides
   # win and provider runners wait for a healthy authenticated control plane.
+  # Both runners are profile-gated because a persisted queue can resume real
+  # repository mutation even when the dispatcher itself is stopped.
   agent-runner-openai:
+    profiles: [production-workers, production-mutation]
     group_add:
       - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
     depends_on:
@@ -67,6 +70,7 @@ services:
     restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
 
   agent-runner-anthropic:
+    profiles: [production-workers, production-mutation]
     group_add:
       - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
     depends_on:
@@ -75,7 +79,8 @@ services:
     restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
 
   # Real issue discovery and mutation is never part of a normal production-up.
-  # An operator must explicitly select this profile after the live doctors pass.
+  # Selecting this profile also admits the two workers through their shared
+  # profile, so dispatcher dependencies remain explicit and deterministic.
   task-dispatcher:
     profiles: [production-mutation]
     group_add:

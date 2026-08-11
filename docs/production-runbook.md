@@ -60,9 +60,17 @@ just production-status prod
 
 `production-preflight` decrypts only on the trusted host, validates canonical SOPS policy, materializes five group-restricted files below `env/dec/runtime-secrets/prod`, and generates a mode-0600 `compose.env` containing paths, the deployment GID, and non-secret tuning only. The production Compose stack mounts those files as Docker secrets. The control-plane adapter imports the shared token only inside the container process immediately before `exec`; its value is absent from the Compose model and container configuration metadata.
 
-The provider doctors make real, sanitized API capability requests. They never print a key or full model inventory. A missing, expired, invalid, unauthorized, quota-exhausted, or rate-limited provider is not admitted to work. `production-up` reruns the doctor gate and starts only the authenticated control plane and the two provider runners.
+The provider doctors make real, sanitized API capability requests. They never print a key or full model inventory. A missing, expired, invalid, unauthorized, quota-exhausted, or rate-limited provider is not admitted to work. `production-up` reruns the doctor gate and starts only the authenticated control plane. Both provider runners are profile-gated because their persistent queues can resume repository-changing work even while the dispatcher is stopped.
 
-The real GitHub/Linear dispatcher is assigned to the `production-mutation` profile and is excluded from routine startup. After every exact-head public check, paired-org test, SOPS review, and live provider doctor is green, admit mutation with the literal acknowledgment:
+To start the provider workers without issue discovery, use the separate literal acknowledgment:
+
+```sh
+just production-workers-up prod ENABLE_PROVIDER_WORKERS
+```
+
+This can resume work already present in either persistent queue. Treat it as a mutation-capable operation, inspect queue state first, and do not use it for a container smoke test.
+
+The real GitHub/Linear dispatcher is assigned to the `production-mutation` profile and is excluded from routine startup. Both provider runners share that profile so admitting the dispatcher starts its declared dependencies without a hidden second step. After every exact-head public check, paired-org test, SOPS review, and live provider doctor is green, admit mutation with the literal acknowledgment:
 
 ```sh
 just production-admit prod ENABLE_REAL_PRODUCTION_MUTATION
@@ -80,10 +88,24 @@ Do not use that command merely to test container startup. It begins real issue d
 - render `compose.agents.yaml` followed by `compose.production.yaml` using generated synthetic secret files;
 - build and start only `control-plane`, then verify health, non-root execution, supplementary deployment-GID access, read-only root, dropped capabilities, and token-protected reads;
 - prove the real dispatcher remains behind the `production-mutation` profile;
+- prove both provider runners are absent without a profile, present under `production-workers`, and present with the dispatcher under `production-mutation`;
 - upload no decrypted dotenv, identity, secret file, Compose env file, ciphertext body, or raw container log;
 - report only candidate SHA, workflow/run identifiers, pass/fail state, and bounded non-secret evidence.
 
 The GitHub App must be installed on `meta-agents-demo-test` with contents, pull-request, issue, and Actions access before this gate can be executed or verified. Until then, public exact-head CI is useful evidence but not a substitute for the paired-org promotion gate.
+
+The source repository owns the reusable contract so the test organization cannot silently drift from production. The `secure-env-e2e` caller must pin both the workflow reference and `candidate_sha` to the same reviewed 40-character commit:
+
+```yaml
+jobs:
+  candidate:
+    uses: meta-agents-demo/meta-agent-control-plane.rs/.github/workflows/production-compose.yml@REVIEWED_40_CHARACTER_SHA
+    with:
+      candidate_sha: REVIEWED_40_CHARACTER_SHA
+      runner_label: meta-agents-demo-test-linux
+```
+
+Use the approved self-hosted Linux label while private GitHub-hosted jobs are refused by the account spending limit. The reusable workflow rejects a non-SHA candidate and verifies the checkout before any contract step runs.
 
 ## Stop and remove plaintext
 
