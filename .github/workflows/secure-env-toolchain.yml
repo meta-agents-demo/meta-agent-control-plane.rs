@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - flake.nix
+      - flake.lock
       - justfile
       - .nix/devshell.nix
       - .github/workflows/secure-env-toolchain.yml
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - flake.nix
+      - flake.lock
       - justfile
       - .nix/devshell.nix
       - .github/workflows/secure-env-toolchain.yml
@@ -45,4 +47,7 @@ jobs:
           github_access_token: ${{ github.token }}
 
       - name: Prove pinned ores-sops and just entry point
-        run: nix develop --no-write-lock-file --command just env-ci
+        run: |
+          test -f flake.lock
+          nix develop --no-write-lock-file --command just env-ci
+          git diff --exit-code -- flake.lock

@@ -1,9 +1,26 @@
 /target
 /.direnv
-/.env
 *.log
+__pycache__/
+*.py[cod]
+node_modules/
+.npmrc
 .DS_Store
-tmp
-temp
-tmp/worktrees
-temp/worktrees
+/tmp/
+/temp/
+
+# Plaintext dotenv is local-only at every depth, including common suffixes.
+*.env
+*/*.env
+*/**/*.env
+.env.*
+*.env.*
+!.env.example
+
+# Decrypted material and generated Docker secret files are never tracked.
+/env/dec/
+
+# Only the canonical dev/prod SOPS ciphertext files may be tracked.
+/env/enc/*
+!/env/enc/dev.env.enc
+!/env/enc/prod.env.enc
