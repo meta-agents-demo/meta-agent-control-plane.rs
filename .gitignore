@@ -1,6 +1,8 @@
 /target
 /.direnv
 *.log
+__pycache__/
+*.py[cod]
 .DS_Store
 /tmp/
 /temp/

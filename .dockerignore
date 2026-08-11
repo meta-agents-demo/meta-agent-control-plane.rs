@@ -2,6 +2,8 @@
 .github
 .direnv
 target
+__pycache__
+*.py[cod]
 
 # Never send decrypted or encrypted operator environments into a persistent
 # Docker build context or image layer.

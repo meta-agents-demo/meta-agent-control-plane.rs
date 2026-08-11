@@ -18,6 +18,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    group_add:
+      - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
     pids_limit: 256
     environment:
       META_AGENT_HTTP_ADDR: 0.0.0.0:8787
@@ -46,13 +48,40 @@ services:
     cpus: ${META_AGENT_CONTROL_PLANE_CPUS:-1.0}
     mem_limit: ${META_AGENT_CONTROL_PLANE_MEMORY:-1g}
     stop_grace_period: 30s
-    restart: unless-stopped
+    restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
     logging:
       driver: json-file
       options:
         max-size: 10m
         max-file: "3"
 
+  # These partial service definitions harden the fleet declared by
+  # compose.agents.yaml. Load compose.production.yaml last so these overrides
+  # win and provider runners wait for a healthy authenticated control plane.
+  agent-runner-openai:
+    group_add:
+      - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+
+  agent-runner-anthropic:
+    group_add:
+      - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+
+  # Real issue discovery and mutation is never part of a normal production-up.
+  # An operator must explicitly select this profile after the live doctors pass.
+  task-dispatcher:
+    profiles: [production-mutation]
+    group_add:
+      - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
+    restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+
 secrets:
   control_plane_token:
-    file: ${META_AGENT_AUTH_TOKEN_FILE:?set META_AGENT_AUTH_TOKEN_FILE to a chmod-600 file}
+    file: ${META_AGENT_AUTH_TOKEN_FILE:?set META_AGENT_AUTH_TOKEN_FILE to a restricted file}

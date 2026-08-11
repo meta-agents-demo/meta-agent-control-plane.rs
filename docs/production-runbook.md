@@ -9,9 +9,10 @@ A production candidate must satisfy all of these conditions:
 1. `cargo fmt`, Clippy, Rust tests, protocol/dashboard contracts, and the existing OCI runtime contract pass at the exact candidate head.
 2. `just env-ci` proves the pinned `ores-sops` package, the Nix shell, the runtime-secret materializer, and the control-plane secret adapter.
 3. The hardened production Compose model renders using synthetic secrets and starts the control plane as UID 10001 with a read-only root, all capabilities dropped, `no-new-privileges`, bounded PID/memory/CPU settings, a health check, and only loopback HTTP published.
-4. `.dockerignore` excludes `.env`, nested dotenv files, `.sops.yaml`, and the complete `env` tree so plaintext cannot enter a persistent build layer.
-5. The exact candidate is exercised from `meta-agents-demo-test`; production mutation remains disabled until that organization and its GitHub App installation are verifiably available.
-6. Live OpenAI and Anthropic doctors pass from protected runtime secret files. Provider keys are not needed for the earlier gates.
+4. Secret payload files are mode 0640, share one deployment GID, and are readable only by the deployment account and the explicitly added container group. The generated path-only `compose.env` remains mode 0600.
+5. `.dockerignore` excludes `.env`, nested dotenv files, `.sops.yaml`, the complete `env` tree, and Python bytecode so plaintext cannot enter a persistent build layer.
+6. The exact candidate is exercised from `meta-agents-demo-test`; production mutation remains disabled until that organization and its GitHub App installation are verifiably available.
+7. Live OpenAI and Anthropic doctors pass from protected runtime secret files. Provider keys are not needed for the earlier gates.
 
 ## One-time SOPS bootstrap
 
@@ -42,11 +43,13 @@ just env-edit prod
 just env-verify
 ```
 
-Required names are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GH_TOKEN`, `LINEAR_API_KEY`, `META_AGENT_AUTH_TOKEN`, and `META_AGENT_CREDENTIAL_EXPIRES_AT`. The shared control-plane token should be a fresh random value of at least 32 bytes. GitHub and Linear credentials should be bounded service credentials with only the repositories/projects required by the dispatcher.
+Required names are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GH_TOKEN`, `LINEAR_API_KEY`, `META_AGENT_AUTH_TOKEN`, and `META_AGENT_CREDENTIAL_EXPIRES_AT`. The shared control-plane token should be a fresh random value of at least 32 bytes. GitHub and Linear credentials should be bounded service credentials with only the repositories and projects required by the dispatcher. Keep `META_AGENT_RESTART_POLICY=unless-stopped` for a normal deployment; CI sets it to `no` so a failed process cannot be hidden by a restart loop.
 
 Do not paste provider, GitHub, Linear, SOPS, or control-plane credentials into chat, issues, pull requests, CI output, shell history, or artifacts. Insert them through `just env-edit prod` on a trusted host or through the protected deployment secret store.
 
-## Preflight and start
+Run materialization as a dedicated deployment account or under a dedicated private deployment group. The materializer preserves the account's effective group on each mode-0640 secret file and writes that numeric GID, not a credential, into the mode-0600 generated Compose env. Compose adds only that GID to the non-root services that consume mounted secrets.
+
+## Preflight, provider certification, and safe startup
 
 ```sh
 just production-preflight prod
@@ -55,9 +58,17 @@ just production-up prod
 just production-status prod
 ```
 
-`production-preflight` decrypts only on the trusted host, validates canonical SOPS policy, materializes five owner-only files below `env/dec/runtime-secrets/prod`, and generates a mode-0600 `compose.env` containing paths and non-secret tuning only. The production Compose stack mounts those files as Docker secrets. The control-plane adapter imports the shared token only inside the container process immediately before `exec`; its value is absent from the Compose model and container configuration metadata.
+`production-preflight` decrypts only on the trusted host, validates canonical SOPS policy, materializes five group-restricted files below `env/dec/runtime-secrets/prod`, and generates a mode-0600 `compose.env` containing paths, the deployment GID, and non-secret tuning only. The production Compose stack mounts those files as Docker secrets. The control-plane adapter imports the shared token only inside the container process immediately before `exec`; its value is absent from the Compose model and container configuration metadata.
 
-The provider doctors make real, sanitized API capability requests. They never print a key or full model inventory. A missing, expired, invalid, unauthorized, quota-exhausted, or rate-limited provider is not admitted to work.
+The provider doctors make real, sanitized API capability requests. They never print a key or full model inventory. A missing, expired, invalid, unauthorized, quota-exhausted, or rate-limited provider is not admitted to work. `production-up` reruns the doctor gate and starts only the authenticated control plane and the two provider runners.
+
+The real GitHub/Linear dispatcher is assigned to the `production-mutation` profile and is excluded from routine startup. After every exact-head public check, paired-org test, SOPS review, and live provider doctor is green, admit mutation with the literal acknowledgment:
+
+```sh
+just production-admit prod ENABLE_REAL_PRODUCTION_MUTATION
+```
+
+Do not use that command merely to test container startup. It begins real issue discovery and can enqueue repository-changing work in the configured allowlist.
 
 ## Paired test-organization gate
 
@@ -66,8 +77,9 @@ The provider doctors make real, sanitized API capability requests. They never pr
 - check out the exact production candidate SHA;
 - generate an ephemeral age identity and obviously synthetic dotenv values at runtime;
 - run `just env-ci` and an SOPS encrypt/decrypt/no-key negative journey;
-- render `compose.production.yaml` plus `compose.agents.yaml` using generated synthetic secret files;
-- build and start only `control-plane`, then verify health, non-root execution, read-only root, dropped capabilities, and token-protected reads;
+- render `compose.agents.yaml` followed by `compose.production.yaml` using generated synthetic secret files;
+- build and start only `control-plane`, then verify health, non-root execution, supplementary deployment-GID access, read-only root, dropped capabilities, and token-protected reads;
+- prove the real dispatcher remains behind the `production-mutation` profile;
 - upload no decrypted dotenv, identity, secret file, Compose env file, ciphertext body, or raw container log;
 - report only candidate SHA, workflow/run identifiers, pass/fail state, and bounded non-secret evidence.
 
@@ -80,7 +92,7 @@ just production-down prod
 just env-lock
 ```
 
-The shutdown path removes containers, generated runtime secret files, decrypted dotenv files, and the managed `.env` symlink. Confirm `git status --short` contains no secret material before leaving the trusted host.
+The shutdown path includes the mutation profile so it stops the dispatcher when admitted, then removes containers, generated runtime secret files, decrypted dotenv files, and the managed `.env` symlink. Confirm `git status --short` contains no secret material before leaving the trusted host.
 
 ## Rotation and rollback
 

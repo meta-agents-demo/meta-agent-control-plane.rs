@@ -1,5 +1,7 @@
 #!/bin/sh
 set -eu
+umask 077
+export LC_ALL=C
 
 fail() {
   printf '%s\n' "meta-agent control-plane startup failed: $1" >&2
@@ -20,6 +22,7 @@ if [ -n "$secret_file" ]; then
   case "$token" in
     *"
 "*|*""*) fail "authentication token must be a single line" ;;
+    *[![:print:]]*) fail "authentication token must contain printable ASCII only" ;;
   esac
   [ "${#token}" -ge 16 ] || fail "authentication token must contain at least 16 bytes"
 

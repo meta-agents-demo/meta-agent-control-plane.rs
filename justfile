@@ -55,7 +55,7 @@ env-lock: env-toolchain
     mkdir -p env/dec
     chmod 700 env/dec
 
-# Convert an already decrypted profile into owner-only Docker secret files.
+# Convert an already decrypted profile into restricted Docker secret files.
 runtime-secrets profile="prod": env-toolchain
     case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
     mkdir -p env/dec
@@ -73,34 +73,48 @@ production-preflight profile="prod": env-toolchain
     python3 scripts/materialize_runtime_secrets.py --profile "{{profile}}"
     docker compose \
       --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" \
-      -f compose.production.yaml \
       -f compose.agents.yaml \
+      -f compose.production.yaml \
       config --quiet
-
-# Start the authenticated control plane, both provider runners, and dispatcher.
-production-up profile="prod":
-    just production-preflight "{{profile}}"
-    docker compose \
-      --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" \
-      -f compose.production.yaml \
-      -f compose.agents.yaml \
-      up --detach --build
 
 # Run live, sanitized provider capability checks. These are the only gates that
 # require valid OpenAI and Anthropic credentials.
 production-doctor profile="prod":
     just production-preflight "{{profile}}"
-    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.production.yaml -f compose.agents.yaml run --rm agent-runner-openai doctor --provider openai
-    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.production.yaml -f compose.agents.yaml run --rm agent-runner-anthropic doctor --provider anthropic
+    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml build control-plane agent-runner-openai agent-runner-anthropic
+    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml run --rm agent-runner-openai doctor --provider openai
+    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml run --rm agent-runner-anthropic doctor --provider anthropic
+
+# Start the authenticated control plane and provider runners only. Real issue
+# discovery/mutation remains disabled until production-admit is called explicitly.
+production-up profile="prod":
+    just production-doctor "{{profile}}"
+    docker compose \
+      --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" \
+      -f compose.agents.yaml \
+      -f compose.production.yaml \
+      up --detach --build
+
+# Explicitly admit the real GitHub/Linear dispatcher after every earlier gate.
+# The literal acknowledgment prevents a routine `production-up` from mutating repos.
+production-admit profile="prod" acknowledgment="":
+    test "{{acknowledgment}}" = "ENABLE_REAL_PRODUCTION_MUTATION" || { echo 'pass ENABLE_REAL_PRODUCTION_MUTATION as the second argument' >&2; exit 64; }
+    just production-up "{{profile}}"
+    docker compose \
+      --profile production-mutation \
+      --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" \
+      -f compose.agents.yaml \
+      -f compose.production.yaml \
+      up --detach task-dispatcher
 
 production-status profile="prod":
-    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.production.yaml -f compose.agents.yaml ps
+    docker compose --profile production-mutation --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml ps
 
 production-down profile="prod":
     case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
     compose_env="env/dec/runtime-secrets/{{profile}}/compose.env"; \
       if test -f "$compose_env"; then \
-        docker compose --env-file "$compose_env" -f compose.production.yaml -f compose.agents.yaml down --remove-orphans; \
+        docker compose --profile production-mutation --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml down --remove-orphans; \
       fi
     python3 scripts/materialize_runtime_secrets.py --profile "{{profile}}" --clean
     ores-sops lock

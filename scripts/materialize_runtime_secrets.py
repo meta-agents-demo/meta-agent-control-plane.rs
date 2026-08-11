@@ -4,7 +4,7 @@
 The command never prints secret values and never places them in the generated
 Compose environment file. It accepts only the documented production keys,
 rejects ambiguous dotenv syntax, and writes every generated file atomically
-with owner-only permissions.
+with owner/group-restricted permissions.
 """
 
 from __future__ import annotations
@@ -53,6 +53,7 @@ PASSTHROUGH_KEYS: Final = {
     "META_AGENT_OPENAI_RETRY_SECONDS",
     "META_AGENT_RUNTIME_DISCOVERY_ENABLED",
     "META_AGENT_RUNTIME_SAMPLE_INTERVAL_MS",
+    "META_AGENT_RESTART_POLICY",
 }
 
 REQUIRED_KEYS: Final = set(SECRET_FILES) | {"META_AGENT_CREDENTIAL_EXPIRES_AT"}
@@ -179,24 +180,28 @@ def validate_values(values: dict[str, str]) -> None:
         if any(ord(character) < 32 or ord(character) == 127 for character in value):
             raise MaterializationError(f"{key} contains a control character")
 
+    restart_policy = values.get("META_AGENT_RESTART_POLICY")
+    if restart_policy and restart_policy not in {"no", "always", "on-failure", "unless-stopped"}:
+        raise MaterializationError("META_AGENT_RESTART_POLICY is invalid")
+
     _validate_expiry(values["META_AGENT_CREDENTIAL_EXPIRES_AT"])
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def _atomic_write(path: Path, content: str, mode: int = 0o600) -> None:
     _assert_no_symlink(path)
     _ensure_private_directory(path.parent)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(temporary_name)
     try:
         if os.name == "posix":
-            os.fchmod(descriptor, 0o600)
+            os.fchmod(descriptor, mode)
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
         if os.name == "posix":
-            os.chmod(path, 0o600)
+            os.chmod(path, mode)
     finally:
         try:
             temporary.unlink()
@@ -223,10 +228,16 @@ def materialize(profile: str, input_path: Path, output_root: Path) -> Path:
     for environment_key, filename in SECRET_FILES.items():
         path = output_directory / filename
         expected_paths.add(path)
-        _atomic_write(path, values[environment_key])
+        _atomic_write(path, values[environment_key], mode=0o640)
+
+    secret_gids = {(output_directory / filename).stat().st_gid for filename in SECRET_FILES.values()}
+    if len(secret_gids) != 1:
+        raise MaterializationError("runtime secret files must share one deployment group")
+    secret_gid = next(iter(secret_gids))
 
     compose_lines = [
-        "# Generated runtime paths only. This file is local, mode 0600, and must never be committed."
+        "# Generated runtime paths only. This file is local, mode 0600, and must never be committed.",
+        f"META_AGENT_SECRET_GID={_compose_quote(str(secret_gid))}",
     ]
     for environment_key, filename in SECRET_FILES.items():
         file_key = {
@@ -245,9 +256,7 @@ def materialize(profile: str, input_path: Path, output_root: Path) -> Path:
 
     for child in output_directory.iterdir():
         if child not in expected_paths:
-            if child.is_symlink() or not child.is_file():
-                raise MaterializationError(f"unexpected managed runtime path: {child.name}")
-            child.unlink()
+            raise MaterializationError(f"unexpected managed runtime path: {child.name}")
 
     return compose_path
 
