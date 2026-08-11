@@ -5,7 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: meta-agent-control-plane:local
+      args:
+        VCS_REF: ${META_AGENT_RELEASE_SHA:?set META_AGENT_RELEASE_SHA to the exact published commit}
+    image: ${META_AGENT_CONTROL_PLANE_IMAGE:?set META_AGENT_CONTROL_PLANE_IMAGE to the published sha256 digest}
     # The image retains its direct binary entrypoint for normal OCI use. The
     # production Compose path uses this audited adapter to load the shared
     # token from a mounted file without placing its value in the Compose model.
@@ -59,28 +61,55 @@ services:
   # compose.agents.yaml. Load compose.production.yaml last so these overrides
   # win and provider runners wait for a healthy authenticated control plane.
   agent-runner-openai:
+    image: ${META_AGENT_RUNNER_IMAGE:?set META_AGENT_RUNNER_IMAGE to the published sha256 digest}
     group_add:
       - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
     depends_on:
       control-plane:
         condition: service_healthy
+    pids_limit: ${META_AGENT_RUNNER_PIDS:-256}
+    cpus: ${META_AGENT_RUNNER_CPUS:-1.0}
+    mem_limit: ${META_AGENT_RUNNER_MEMORY:-2g}
     restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
   agent-runner-anthropic:
+    image: ${META_AGENT_RUNNER_IMAGE:?set META_AGENT_RUNNER_IMAGE to the published sha256 digest}
     group_add:
       - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
     depends_on:
       control-plane:
         condition: service_healthy
+    pids_limit: ${META_AGENT_RUNNER_PIDS:-256}
+    cpus: ${META_AGENT_RUNNER_CPUS:-1.0}
+    mem_limit: ${META_AGENT_RUNNER_MEMORY:-2g}
     restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
   # Real issue discovery and mutation is never part of a normal production-up.
   # An operator must explicitly select this profile after the live doctors pass.
   task-dispatcher:
     profiles: [production-mutation]
+    image: ${META_AGENT_RUNNER_IMAGE:?set META_AGENT_RUNNER_IMAGE to the published sha256 digest}
     group_add:
       - "${META_AGENT_SECRET_GID:?set META_AGENT_SECRET_GID from the generated compose.env}"
+    pids_limit: ${META_AGENT_DISPATCHER_PIDS:-128}
+    cpus: ${META_AGENT_DISPATCHER_CPUS:-0.5}
+    mem_limit: ${META_AGENT_DISPATCHER_MEMORY:-512m}
     restart: "${META_AGENT_RESTART_POLICY:-unless-stopped}"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
 secrets:
   control_plane_token:

@@ -8,15 +8,20 @@ on:
       - .gitattributes
       - .gitignore
       - Dockerfile
+      - Dockerfile.agent-runner
       - compose.production.yaml
       - compose.agents.yaml
       - config/runtime-env.example
       - docs/production-runbook.md
       - docs/agent-fleet.md
       - justfile
+      - flake.nix
       - scripts/control_plane_secret_entrypoint.sh
       - scripts/materialize_runtime_secrets.py
+      - scripts/secure_environment_cleanup.sh
+      - scripts/verify_release_images.sh
       - tests/test_materialize_runtime_secrets.py
+      - tests/test_secure_environment_cleanup.py
       - .github/workflows/production-compose.yml
   push:
     branches: [main]
@@ -25,15 +30,20 @@ on:
       - .gitattributes
       - .gitignore
       - Dockerfile
+      - Dockerfile.agent-runner
       - compose.production.yaml
       - compose.agents.yaml
       - config/runtime-env.example
       - docs/production-runbook.md
       - docs/agent-fleet.md
       - justfile
+      - flake.nix
       - scripts/control_plane_secret_entrypoint.sh
       - scripts/materialize_runtime_secrets.py
+      - scripts/secure_environment_cleanup.sh
+      - scripts/verify_release_images.sh
       - tests/test_materialize_runtime_secrets.py
+      - tests/test_secure_environment_cleanup.py
       - .github/workflows/production-compose.yml
   workflow_dispatch:
 
@@ -58,9 +68,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -x scripts/secure_environment_cleanup.sh
+          test -x scripts/verify_release_images.sh
           sh -n scripts/control_plane_secret_entrypoint.sh
+          sh -n scripts/secure_environment_cleanup.sh
+          bash -n scripts/verify_release_images.sh
           python3 -m py_compile scripts/materialize_runtime_secrets.py
           python3 -m unittest -v tests/test_materialize_runtime_secrets.py
+          python3 -m unittest -v tests/test_secure_environment_cleanup.py
 
       - name: Prove plaintext is excluded from Git and Docker contexts
         shell: bash
@@ -68,37 +83,39 @@ jobs:
           set -euo pipefail
           mkdir -p env/dec nested/example
           : > .env
-          : > env/dec/prod.env
+          : > env/dec/dev.env
           : > nested/example/local.env.backup
           git check-ignore --no-index --quiet .env
-          git check-ignore --no-index --quiet env/dec/prod.env
+          git check-ignore --no-index --quiet env/dec/dev.env
           git check-ignore --no-index --quiet nested/example/local.env.backup
           grep -Fxq 'env' .dockerignore
           grep -Fxq '.env' .dockerignore
           grep -Fxq '.sops.yaml' .dockerignore
-          rm -rf env nested .env
 
       - name: Generate synthetic runtime-only secret files
         shell: bash
         run: |
           set -euo pipefail
           install -d -m 700 env/dec
-          cat > env/dec/prod.env <<'SYNTHETIC'
+          cat > env/dec/dev.env <<'SYNTHETIC'
           OPENAI_API_KEY=synthetic-openai-contract-key-0001
           ANTHROPIC_API_KEY=synthetic-anthropic-contract-key-0001
           GH_TOKEN=synthetic-github-contract-token-0001
           LINEAR_API_KEY=synthetic-linear-contract-token-0001
           META_AGENT_AUTH_TOKEN=synthetic-control-plane-token-0001
           META_AGENT_CREDENTIAL_EXPIRES_AT=2099-01-01T00:00:00Z
+          META_AGENT_RELEASE_SHA=0123456789abcdef0123456789abcdef01234567
+          META_AGENT_CONTROL_PLANE_IMAGE=meta-agent-control-plane:contract
+          META_AGENT_RUNNER_IMAGE=meta-agent-runner:contract
           META_AGENT_HTTP_PORT=18787
           META_AGENT_RESTART_POLICY=no
           SYNTHETIC
-          chmod 600 env/dec/prod.env
-          python3 scripts/materialize_runtime_secrets.py --profile prod
+          chmod 600 env/dec/dev.env
+          python3 scripts/materialize_runtime_secrets.py --profile dev
 
-          compose_env=env/dec/runtime-secrets/prod/compose.env
+          compose_env=env/dec/runtime-secrets/dev/compose.env
           test "$(stat -c '%a' "$compose_env")" = 600
-          test "$(stat -c '%a' env/dec/runtime-secrets/prod/control_plane_token)" = 640
+          test "$(stat -c '%a' env/dec/runtime-secrets/dev/control_plane_token)" = 640
           grep -Eq '^META_AGENT_SECRET_GID="[0-9]+"$' "$compose_env"
           if grep -Fq 'synthetic-control-plane-token-0001' "$compose_env"; then
             echo 'secret value leaked into generated Compose env' >&2
@@ -122,6 +139,12 @@ jobs:
           profiles = dispatcher.get("profiles")
           if profiles != ["production-mutation"]:
               raise SystemExit(f"task-dispatcher must remain profile-gated, got: {profiles!r}")
+
+          for name in ("control-plane", "agent-runner-openai", "agent-runner-anthropic", "task-dispatcher"):
+              service = admitted["services"][name]
+              for key in ("cpus", "mem_limit", "pids_limit", "logging"):
+                  if not service.get(key):
+                      raise SystemExit(f"{name} lacks production bound: {key}")
           PY
           if grep -Fq 'synthetic-control-plane-token-0001' /tmp/meta-agents-compose.json /tmp/meta-agents-compose-mutation.json; then
             echo 'secret value leaked into rendered Compose model' >&2
@@ -133,11 +156,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          compose_env=env/dec/runtime-secrets/prod/compose.env
+          compose_env=env/dec/runtime-secrets/dev/compose.env
           compose=(docker compose --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml)
           cleanup() {
             "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
-            python3 scripts/materialize_runtime_secrets.py --profile prod --clean >/dev/null 2>&1 || true
+            python3 scripts/materialize_runtime_secrets.py --profile dev --clean >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
@@ -166,7 +189,7 @@ jobs:
           fi
 
           test "$(docker exec "$container_id" id -u)" = 10001
-          secret_gid="$(stat -c '%g' env/dec/runtime-secrets/prod/control_plane_token)"
+          secret_gid="$(stat -c '%g' env/dec/runtime-secrets/dev/control_plane_token)"
           docker exec "$container_id" id -G | tr ' ' '\n' | grep -Fxq "$secret_gid"
           unset secret_gid
           test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container_id")" = true
@@ -185,19 +208,32 @@ jobs:
           curl --fail --silent --show-error "$base/healthz" >/dev/null
           curl --fail --silent --show-error "$base/readyz" >/dev/null
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$base/api/v1/snapshot")" = 401
-          token="$(cat env/dec/runtime-secrets/prod/control_plane_token)"
+          token="$(cat env/dec/runtime-secrets/dev/control_plane_token)"
           curl --fail --silent --show-error -H "authorization: Bearer $token" "$base/api/v1/snapshot" >/dev/null
           unset token
+
+      - name: Prove dispatcher state is writable by the non-root image user
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/materialize_runtime_secrets.py --profile dev
+          compose_env=env/dec/runtime-secrets/dev/compose.env
+          compose=(docker compose --profile production-mutation --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml)
+          "${compose[@]}" build task-dispatcher
+          scripts/verify_release_images.sh --skip-pull "$compose_env"
+          "${compose[@]}" run --rm --no-deps \
+            --entrypoint python3 task-dispatcher -c \
+            'from pathlib import Path; p=Path("/state/dispatcher/write-proof"); p.write_text("ok"); p.replace(p.with_suffix(".done"))'
 
       - name: Prove generated plaintext is cleaned
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          if test -f env/dec/runtime-secrets/prod/compose.env; then
-            docker compose --env-file env/dec/runtime-secrets/prod/compose.env -f compose.agents.yaml -f compose.production.yaml down --remove-orphans || true
+          if test -f env/dec/runtime-secrets/dev/compose.env; then
+            docker compose --env-file env/dec/runtime-secrets/dev/compose.env -f compose.agents.yaml -f compose.production.yaml down --remove-orphans || true
           fi
-          python3 scripts/materialize_runtime_secrets.py --profile prod --clean || true
-          rm -f env/dec/prod.env
-          test ! -e env/dec/runtime-secrets/prod
+          python3 scripts/materialize_runtime_secrets.py --profile dev --clean || true
+          rm -f env/dec/dev.env
+          test ! -e env/dec/runtime-secrets/dev
           test -z "$(git status --short)"

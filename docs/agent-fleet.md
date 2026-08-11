@@ -61,7 +61,7 @@ Credentials pasted into chat, tickets, pull requests, CI output, or command hist
 
 ## Live provider and capability confirmation
 
-The `doctor` command reads the mounted provider secret and performs a real API request. It reports only sanitized status and counts; it never prints a key or full model inventory.
+The `doctor` command reads the mounted provider secret and performs a real API request. Before either doctor runs, the production workflow pulls the immutable control-plane and runner digests recorded for `META_AGENT_RELEASE_SHA` and verifies their OCI revision labels. Doctors run with dependencies disabled, report only sanitized status and counts, and never print a key or full model inventory.
 
 ```sh
 just production-doctor prod
@@ -75,7 +75,7 @@ A missing, expired, invalid, unauthorized, quota-exhausted, or rate-limited prov
 
 ## Safe startup and explicit mutation admission
 
-Routine production startup reruns preflight and both live provider doctors, then starts only the control plane and provider runners:
+Routine production startup reruns preflight and both live provider doctors, then starts only the already-verified control plane and provider runners with builds and implicit pulls disabled:
 
 ```sh
 just production-up prod

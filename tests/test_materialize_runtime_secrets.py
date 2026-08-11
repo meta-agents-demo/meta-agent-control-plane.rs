@@ -25,6 +25,11 @@ SYNTHETIC_VALUES = {
     "META_AGENT_AUTH_TOKEN": "synthetic-control-plane-token-0001",
     "META_AGENT_CREDENTIAL_EXPIRES_AT": "2099-01-01T00:00:00Z",
     "META_AGENT_HTTP_PORT": "18787",
+    "META_AGENT_RELEASE_SHA": "0123456789abcdef0123456789abcdef01234567",
+    "META_AGENT_CONTROL_PLANE_IMAGE": (
+        "ghcr.io/meta-agents-demo/meta-agent-control-plane@sha256:" + "a" * 64
+    ),
+    "META_AGENT_RUNNER_IMAGE": "ghcr.io/meta-agents-demo/meta-agent-runner@sha256:" + "b" * 64,
     "META_AGENT_RESTART_POLICY": "no",
 }
 
@@ -81,6 +86,10 @@ class RuntimeSecretMaterializationTests(unittest.TestCase):
         del missing["GH_TOKEN"]
         cases.append(dotenv(missing))
 
+        missing_release = dict(SYNTHETIC_VALUES)
+        del missing_release["META_AGENT_RELEASE_SHA"]
+        cases.append(dotenv(missing_release))
+
         unknown = dict(SYNTHETIC_VALUES)
         unknown["ACCIDENTAL_SECRET"] = "must-not-be-copied"
         cases.append(dotenv(unknown))
@@ -95,12 +104,39 @@ class RuntimeSecretMaterializationTests(unittest.TestCase):
         invalid_restart["META_AGENT_RESTART_POLICY"] = "surprise"
         cases.append(dotenv(invalid_restart))
 
+        invalid_release = dict(SYNTHETIC_VALUES)
+        invalid_release["META_AGENT_RELEASE_SHA"] = "main"
+        cases.append(dotenv(invalid_release))
+
+        invalid_image = dict(SYNTHETIC_VALUES)
+        invalid_image["META_AGENT_RUNNER_IMAGE"] = "ghcr.io/meta-agents-demo/meta-agent-runner:main"
+        cases.append(dotenv(invalid_image))
+
         for content in cases:
             with self.subTest(content=content.splitlines()[-1].split("=", 1)[0]):
                 self.input.write_text(content, encoding="utf-8")
                 if os.name == "posix":
                     os.chmod(self.input, 0o600)
                 with self.assertRaises(MaterializationError):
+                    materialize("prod", self.input, self.output_root)
+
+    def test_rejects_disabled_or_unbounded_resource_limits(self) -> None:
+        cases = {
+            "META_AGENT_CONTROL_PLANE_CPUS": "0",
+            "META_AGENT_RUNNER_CPUS": "33",
+            "META_AGENT_DISPATCHER_MEMORY": "0",
+            "META_AGENT_RUNNER_MEMORY": "65g",
+            "META_AGENT_DISPATCHER_PIDS": "-1",
+            "META_AGENT_RUNNER_PIDS": "4097",
+        }
+        for key, value in cases.items():
+            with self.subTest(key=key, value=value):
+                invalid = dict(SYNTHETIC_VALUES)
+                invalid[key] = value
+                self.input.write_text(dotenv(invalid), encoding="utf-8")
+                if os.name == "posix":
+                    os.chmod(self.input, 0o600)
+                with self.assertRaisesRegex(MaterializationError, key):
                     materialize("prod", self.input, self.output_root)
 
     def test_rejects_permissive_plaintext_and_symlinked_output(self) -> None:
@@ -128,9 +164,20 @@ class RuntimeSecretMaterializationTests(unittest.TestCase):
         compose_path = materialize("prod", self.input, self.output_root)
         unexpected = compose_path.parent / "unexpected"
         unexpected.write_text("sentinel", encoding="utf-8")
+        existing = {path.name: path.read_bytes() for path in compose_path.parent.iterdir()}
+        changed = dict(SYNTHETIC_VALUES)
+        changed["META_AGENT_AUTH_TOKEN"] = "replacement-control-plane-token-0002"
+        self.input.write_text(dotenv(changed), encoding="utf-8")
+        if os.name == "posix":
+            os.chmod(self.input, 0o600)
         with self.assertRaisesRegex(MaterializationError, "unexpected"):
             materialize("prod", self.input, self.output_root)
         self.assertTrue(unexpected.exists())
+        self.assertEqual(
+            existing,
+            {path.name: path.read_bytes() for path in compose_path.parent.iterdir()},
+            "a rejected materialization must not modify any existing runtime file",
+        )
         with self.assertRaisesRegex(MaterializationError, "unexpected"):
             clean("prod", self.output_root)
         self.assertTrue(unexpected.exists())

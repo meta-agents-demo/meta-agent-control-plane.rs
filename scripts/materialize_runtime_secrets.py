@@ -14,7 +14,6 @@ import datetime as dt
 import json
 import os
 import re
-import shutil
 import stat
 import tempfile
 from pathlib import Path
@@ -41,6 +40,7 @@ PASSTHROUGH_KEYS: Final = {
     "CODEX_VERSION",
     "META_AGENT_ANTHROPIC_MAX_CONCURRENCY",
     "META_AGENT_ANTHROPIC_RETRY_SECONDS",
+    "META_AGENT_CONTROL_PLANE_IMAGE",
     "META_AGENT_CONTROL_PLANE_CPUS",
     "META_AGENT_CONTROL_PLANE_MEMORY",
     "META_AGENT_CREDENTIAL_EXPIRES_AT",
@@ -51,6 +51,14 @@ PASSTHROUGH_KEYS: Final = {
     "META_AGENT_LINEAR_PROJECTS",
     "META_AGENT_OPENAI_MAX_CONCURRENCY",
     "META_AGENT_OPENAI_RETRY_SECONDS",
+    "META_AGENT_RELEASE_SHA",
+    "META_AGENT_RUNNER_IMAGE",
+    "META_AGENT_RUNNER_CPUS",
+    "META_AGENT_RUNNER_MEMORY",
+    "META_AGENT_RUNNER_PIDS",
+    "META_AGENT_DISPATCHER_CPUS",
+    "META_AGENT_DISPATCHER_MEMORY",
+    "META_AGENT_DISPATCHER_PIDS",
     "META_AGENT_RUNTIME_DISCOVERY_ENABLED",
     "META_AGENT_RUNTIME_SAMPLE_INTERVAL_MS",
     "META_AGENT_RESTART_POLICY",
@@ -58,6 +66,23 @@ PASSTHROUGH_KEYS: Final = {
 
 REQUIRED_KEYS: Final = set(SECRET_FILES) | {"META_AGENT_CREDENTIAL_EXPIRES_AT"}
 GENERATED_FILES: Final = set(SECRET_FILES.values()) | {"compose.env"}
+RELEASE_SHA_RE: Final = re.compile(r"^[0-9a-f]{40}$")
+CONTROL_PLANE_IMAGE_RE: Final = re.compile(
+    r"^ghcr\.io/meta-agents-demo/meta-agent-control-plane@sha256:[0-9a-f]{64}$"
+)
+RUNNER_IMAGE_RE: Final = re.compile(r"^ghcr\.io/meta-agents-demo/meta-agent-runner@sha256:[0-9a-f]{64}$")
+CPU_KEYS: Final = {
+    "META_AGENT_CONTROL_PLANE_CPUS",
+    "META_AGENT_RUNNER_CPUS",
+    "META_AGENT_DISPATCHER_CPUS",
+}
+MEMORY_KEYS: Final = {
+    "META_AGENT_CONTROL_PLANE_MEMORY",
+    "META_AGENT_RUNNER_MEMORY",
+    "META_AGENT_DISPATCHER_MEMORY",
+}
+PIDS_KEYS: Final = {"META_AGENT_RUNNER_PIDS", "META_AGENT_DISPATCHER_PIDS"}
+MEMORY_RE: Final = re.compile(r"^([1-9][0-9]*)([kKmMgG])$")
 
 
 class MaterializationError(ValueError):
@@ -155,8 +180,14 @@ def _validate_expiry(value: str, now: dt.datetime | None = None) -> None:
         raise MaterializationError("META_AGENT_CREDENTIAL_EXPIRES_AT must be in the future")
 
 
-def validate_values(values: dict[str, str]) -> None:
-    missing = sorted(REQUIRED_KEYS - values.keys())
+def validate_values(values: dict[str, str], *, require_release_sha: bool = False) -> None:
+    production_keys = {
+        "META_AGENT_RELEASE_SHA",
+        "META_AGENT_CONTROL_PLANE_IMAGE",
+        "META_AGENT_RUNNER_IMAGE",
+    }
+    required = REQUIRED_KEYS | (production_keys if require_release_sha else set())
+    missing = sorted(required - values.keys())
     if missing:
         raise MaterializationError(f"missing required keys: {', '.join(missing)}")
     unknown = sorted(values.keys() - set(SECRET_FILES) - PASSTHROUGH_KEYS)
@@ -183,6 +214,42 @@ def validate_values(values: dict[str, str]) -> None:
     restart_policy = values.get("META_AGENT_RESTART_POLICY")
     if restart_policy and restart_policy not in {"no", "always", "on-failure", "unless-stopped"}:
         raise MaterializationError("META_AGENT_RESTART_POLICY is invalid")
+
+    release_sha = values.get("META_AGENT_RELEASE_SHA")
+    if release_sha and not RELEASE_SHA_RE.fullmatch(release_sha):
+        raise MaterializationError("META_AGENT_RELEASE_SHA must be a lowercase 40-character Git SHA")
+
+    control_plane_image = values.get("META_AGENT_CONTROL_PLANE_IMAGE")
+    if require_release_sha and control_plane_image and not CONTROL_PLANE_IMAGE_RE.fullmatch(control_plane_image):
+        raise MaterializationError("META_AGENT_CONTROL_PLANE_IMAGE must use the canonical GHCR sha256 digest")
+    runner_image = values.get("META_AGENT_RUNNER_IMAGE")
+    if require_release_sha and runner_image and not RUNNER_IMAGE_RE.fullmatch(runner_image):
+        raise MaterializationError("META_AGENT_RUNNER_IMAGE must use the canonical GHCR sha256 digest")
+
+    for key in CPU_KEYS & values.keys():
+        try:
+            cpus = float(values[key])
+        except ValueError as error:
+            raise MaterializationError(f"{key} must be a number from 0.1 through 32") from error
+        if not 0.1 <= cpus <= 32:
+            raise MaterializationError(f"{key} must be a number from 0.1 through 32")
+
+    for key in PIDS_KEYS & values.keys():
+        try:
+            pids = int(values[key])
+        except ValueError as error:
+            raise MaterializationError(f"{key} must be an integer from 32 through 4096") from error
+        if not 32 <= pids <= 4_096:
+            raise MaterializationError(f"{key} must be an integer from 32 through 4096")
+
+    memory_multipliers = {"k": 1, "m": 1_024, "g": 1_024 * 1_024}
+    for key in MEMORY_KEYS & values.keys():
+        match = MEMORY_RE.fullmatch(values[key])
+        if not match:
+            raise MaterializationError(f"{key} must use a positive k, m, or g suffix")
+        kibibytes = int(match.group(1)) * memory_multipliers[match.group(2).lower()]
+        if not 64 * 1_024 <= kibibytes <= 64 * 1_024 * 1_024:
+            raise MaterializationError(f"{key} must be between 64m and 64g")
 
     _validate_expiry(values["META_AGENT_CREDENTIAL_EXPIRES_AT"])
 
@@ -213,21 +280,32 @@ def _compose_quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _assert_managed_directory(output_directory: Path) -> None:
+    """Fail before writes if the managed directory contains an unknown path."""
+
+    if not output_directory.exists():
+        return
+    if not output_directory.is_dir():
+        raise MaterializationError("runtime secret path is not a directory")
+    for child in output_directory.iterdir():
+        if child.name not in GENERATED_FILES or child.is_symlink() or not child.is_file():
+            raise MaterializationError(f"unexpected managed runtime path: {child.name}")
+
+
 def materialize(profile: str, input_path: Path, output_root: Path) -> Path:
     if not PROFILE_RE.fullmatch(profile):
         raise MaterializationError("profile must be dev or prod")
 
     values = parse_dotenv(_read_private_dotenv(input_path))
-    validate_values(values)
+    validate_values(values, require_release_sha=profile == "prod")
 
     output_directory = output_root / profile
     _ensure_private_directory(output_root)
     _ensure_private_directory(output_directory)
+    _assert_managed_directory(output_directory)
 
-    expected_paths: set[Path] = set()
     for environment_key, filename in SECRET_FILES.items():
         path = output_directory / filename
-        expected_paths.add(path)
         _atomic_write(path, values[environment_key], mode=0o640)
 
     secret_gids = {(output_directory / filename).stat().st_gid for filename in SECRET_FILES.values()}
@@ -251,12 +329,9 @@ def materialize(profile: str, input_path: Path, output_root: Path) -> Path:
     for key in sorted(PASSTHROUGH_KEYS & values.keys()):
         compose_lines.append(f"{key}={_compose_quote(values[key])}")
     compose_path = output_directory / "compose.env"
-    expected_paths.add(compose_path)
     _atomic_write(compose_path, "\n".join(compose_lines) + "\n")
 
-    for child in output_directory.iterdir():
-        if child not in expected_paths:
-            raise MaterializationError(f"unexpected managed runtime path: {child.name}")
+    _assert_managed_directory(output_directory)
 
     return compose_path
 
@@ -270,10 +345,13 @@ def clean(profile: str, output_root: Path) -> None:
         return
     if not directory.is_dir():
         raise MaterializationError("runtime secret path is not a directory")
-    for child in directory.iterdir():
+    children = list(directory.iterdir())
+    for child in children:
         if child.name not in GENERATED_FILES or child.is_symlink() or not child.is_file():
             raise MaterializationError(f"refusing to remove unexpected runtime path: {child.name}")
-    shutil.rmtree(directory)
+    for child in children:
+        child.unlink()
+    directory.rmdir()
     try:
         output_root.rmdir()
     except OSError:

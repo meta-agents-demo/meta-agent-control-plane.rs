@@ -46,14 +46,8 @@ env-verify: env-toolchain
     ores-sops verify
 
 # Remove all generated runtime files and decrypted dotenv material.
-env-lock: env-toolchain
-    mkdir -p env/dec
-    chmod 700 env/dec
-    python3 scripts/materialize_runtime_secrets.py --profile dev --clean
-    python3 scripts/materialize_runtime_secrets.py --profile prod --clean
-    ores-sops lock
-    mkdir -p env/dec
-    chmod 700 env/dec
+env-lock:
+    scripts/secure_environment_cleanup.sh dev prod
 
 # Convert an already decrypted profile into restricted Docker secret files.
 runtime-secrets profile="prod": env-toolchain
@@ -81,9 +75,9 @@ production-preflight profile="prod": env-toolchain
 # require valid OpenAI and Anthropic credentials.
 production-doctor profile="prod":
     just production-preflight "{{profile}}"
-    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml build control-plane agent-runner-openai agent-runner-anthropic
-    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml run --rm agent-runner-openai doctor --provider openai
-    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml run --rm agent-runner-anthropic doctor --provider anthropic
+    scripts/verify_release_images.sh "env/dec/runtime-secrets/{{profile}}/compose.env"
+    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml run --rm --no-deps agent-runner-openai doctor --provider openai
+    docker compose --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml run --rm --no-deps agent-runner-anthropic doctor --provider anthropic
 
 # Start the authenticated control plane and provider runners only. Real issue
 # discovery/mutation remains disabled until production-admit is called explicitly.
@@ -93,7 +87,7 @@ production-up profile="prod":
       --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" \
       -f compose.agents.yaml \
       -f compose.production.yaml \
-      up --detach --build
+      up --detach --no-build --pull never
 
 # Explicitly admit the real GitHub/Linear dispatcher after every earlier gate.
 # The literal acknowledgment prevents a routine `production-up` from mutating repos.
@@ -105,26 +99,22 @@ production-admit profile="prod" acknowledgment="":
       --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" \
       -f compose.agents.yaml \
       -f compose.production.yaml \
-      up --detach task-dispatcher
+      up --detach --no-build --pull never task-dispatcher
 
 production-status profile="prod":
     docker compose --profile production-mutation --env-file "env/dec/runtime-secrets/{{profile}}/compose.env" -f compose.agents.yaml -f compose.production.yaml ps
 
 production-down profile="prod":
     case "{{profile}}" in dev|prod) ;; *) echo 'profile must be dev or prod' >&2; exit 64;; esac
-    compose_env="env/dec/runtime-secrets/{{profile}}/compose.env"; \
-      if test -f "$compose_env"; then \
-        docker compose --profile production-mutation --env-file "$compose_env" -f compose.agents.yaml -f compose.production.yaml down --remove-orphans; \
-      fi
-    python3 scripts/materialize_runtime_secrets.py --profile "{{profile}}" --clean
-    ores-sops lock
-    mkdir -p env/dec
-    chmod 700 env/dec
+    scripts/secure_environment_cleanup.sh --with-containers "{{profile}}"
 
 # Credential-free checks used by public CI and the paired test-org harness.
 env-ci: env-toolchain
     mkdir -p env/dec
     chmod 700 env/dec
     python3 -m unittest -v tests/test_materialize_runtime_secrets.py
+    python3 -m unittest -v tests/test_secure_environment_cleanup.py
     sh -n scripts/control_plane_secret_entrypoint.sh
+    sh -n scripts/secure_environment_cleanup.sh
+    bash -n scripts/verify_release_images.sh
     nix flake check --no-write-lock-file -L

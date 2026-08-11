@@ -4,6 +4,9 @@ COPY . .
 RUN cargo build --locked --release --bin meta-agent-control-plane
 
 FROM debian:bookworm-slim AS runtime
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.source="https://github.com/meta-agents-demo/meta-agent-control-plane.rs" \
+      org.opencontainers.image.revision="${VCS_REF}"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \

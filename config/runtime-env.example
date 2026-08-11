@@ -10,8 +10,21 @@ META_AGENT_AUTH_TOKEN=
 META_AGENT_CREDENTIAL_EXPIRES_AT=replace-with-bounded-future-ISO-8601-timestamp
 
 # Optional, non-secret production tuning.
+# Required for production: the exact commit plus the two immutable GHCR digests
+# emitted by that commit's Publish OCI images workflow.
+META_AGENT_RELEASE_SHA=replace-with-exact-published-commit-sha
+META_AGENT_CONTROL_PLANE_IMAGE=ghcr.io/meta-agents-demo/meta-agent-control-plane@sha256:replace-with-64-hex-digest
+META_AGENT_RUNNER_IMAGE=ghcr.io/meta-agents-demo/meta-agent-runner@sha256:replace-with-64-hex-digest
 META_AGENT_HTTP_PORT=8787
 META_AGENT_RESTART_POLICY=unless-stopped
+META_AGENT_CONTROL_PLANE_CPUS=1.0
+META_AGENT_CONTROL_PLANE_MEMORY=1g
+META_AGENT_RUNNER_CPUS=1.0
+META_AGENT_RUNNER_MEMORY=2g
+META_AGENT_RUNNER_PIDS=256
+META_AGENT_DISPATCHER_CPUS=0.5
+META_AGENT_DISPATCHER_MEMORY=512m
+META_AGENT_DISPATCHER_PIDS=128
 META_AGENT_OPENAI_MAX_CONCURRENCY=4
 META_AGENT_ANTHROPIC_MAX_CONCURRENCY=4
 META_AGENT_OPENAI_RETRY_SECONDS=1800
