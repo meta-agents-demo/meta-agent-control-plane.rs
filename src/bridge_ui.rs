@@ -8,7 +8,12 @@ pub fn dashboard(reads_protected: bool, tcp_address: SocketAddr) -> String {
     } else {
         "Read API open"
     };
-    let tcp_endpoint = format!("{tcp_address} · type=bridge_message");
+    let tcp_host = if tcp_address.ip().is_unspecified() {
+        "localhost".to_owned()
+    } else {
+        tcp_address.ip().to_string()
+    };
+    let tcp_endpoint = format!("{tcp_host}:{} · type=bridge_message", tcp_address.port());
     let body = view! {
         <div class="app-shell">
             <aside class="sidebar">
@@ -154,5 +159,12 @@ mod tests {
         assert!(html.contains("127.0.0.1:8798"));
         assert!(html.contains("No prompts, secrets, or hidden reasoning"));
         assert!(!html.contains("meta-agent-read-token="));
+    }
+
+    #[test]
+    fn renders_a_client_reachable_tcp_endpoint_for_wildcard_container_binds() {
+        let html = dashboard(true, "0.0.0.0:8788".parse().unwrap());
+        assert!(html.contains("localhost:8788 · type=bridge_message"));
+        assert!(!html.contains("0.0.0.0:8788 · type=bridge_message"));
     }
 }
