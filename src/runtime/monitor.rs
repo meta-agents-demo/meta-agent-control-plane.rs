@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{HashMap, VecDeque},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -16,14 +16,17 @@ use super::{
     RuntimeConfig,
     collector::{RawProcSnapshot, read_proc_snapshot},
     model::{
-        ControlCommand, ControlCommandAck, ControlCommandRequest, ControlStatus, RuntimeAgentRef,
-        RuntimeAgentTelemetry, RuntimeCollectionStatus, RuntimeError, RuntimeHookEnvelope,
-        RuntimeHookKind, RuntimeProcessTelemetry, RuntimeSnapshot, RuntimeTotals, validate_text,
+        ControlCommand, ControlCommandAck, ControlCommandRequest, ControlStatus,
+        HostObserverStatus, HostProcessObservationEnvelope, RuntimeAgentRef, RuntimeAgentTelemetry,
+        RuntimeCollectionStatus, RuntimeError, RuntimeHookEnvelope, RuntimeHookKind,
+        RuntimeProcessTelemetry, RuntimeSnapshot, RuntimeTotals, validate_text,
     },
 };
 
 const SNAPSHOT_HOOK_LIMIT: usize = 250;
 const SNAPSHOT_COMMAND_LIMIT: usize = 250;
+const HOST_OBSERVATION_ID_LIMIT: usize = 8_192;
+const HOST_OBSERVER_STALE_AFTER_SECONDS: i64 = 15;
 
 #[derive(Clone, Debug)]
 pub struct RuntimeMonitor {
@@ -39,6 +42,8 @@ struct RuntimeState {
     hook_agents: HashMap<String, HookAgentState>,
     commands: VecDeque<ControlCommand>,
     processes: HashMap<u32, RuntimeProcessTelemetry>,
+    host_observations: HashMap<String, HostProcessObservationEnvelope>,
+    host_observation_ids: VecDeque<Uuid>,
     previous_total_ticks: Option<u64>,
     previous_process_ticks: HashMap<u32, u64>,
     cpu_count: usize,
@@ -78,6 +83,8 @@ impl RuntimeMonitor {
                 hook_agents: HashMap::new(),
                 commands: VecDeque::new(),
                 processes: HashMap::new(),
+                host_observations: HashMap::new(),
+                host_observation_ids: VecDeque::new(),
                 previous_total_ticks: None,
                 previous_process_ticks: HashMap::new(),
                 cpu_count: 0,
@@ -165,14 +172,22 @@ impl RuntimeMonitor {
                 process.pid,
                 RuntimeProcessTelemetry {
                     pid: process.pid,
+                    ppid: None,
+                    pgid: None,
                     provider: process.provider,
                     process_name: process.process_name,
                     matched_pattern: process.matched_pattern,
+                    process_role: None,
                     process_state: process.process_state,
                     cpu_percent,
                     rss_bytes: process.rss_bytes,
                     memory_percent,
                     observed_at,
+                    source: "linux_proc".to_owned(),
+                    observer_id: None,
+                    host_id: None,
+                    platform: Some("linux".to_owned()),
+                    stale: false,
                 },
             );
         }
@@ -184,6 +199,37 @@ impl RuntimeMonitor {
         state.memory_total_bytes = snapshot.memory_total_bytes;
         state.last_sample_at = Some(observed_at);
         state.last_error = None;
+    }
+
+    pub async fn ingest_host_observation(
+        &self,
+        observation: HostProcessObservationEnvelope,
+    ) -> Result<(), RuntimeError> {
+        observation.validate()?;
+        let mut state = self.state.write().await;
+        if state
+            .host_observation_ids
+            .contains(&observation.observation_id)
+        {
+            return Err(RuntimeError::DuplicateHostObservation);
+        }
+        if state
+            .host_observations
+            .get(&observation.observer_id)
+            .is_some_and(|current| current.observed_at > observation.observed_at)
+        {
+            return Err(RuntimeError::OutOfOrderHostObservation);
+        }
+        state
+            .host_observation_ids
+            .push_front(observation.observation_id);
+        while state.host_observation_ids.len() > HOST_OBSERVATION_ID_LIMIT {
+            state.host_observation_ids.pop_back();
+        }
+        state
+            .host_observations
+            .insert(observation.observer_id.clone(), observation);
+        Ok(())
     }
 
     pub async fn ingest_hook(&self, hook: RuntimeHookEnvelope) -> Result<(), RuntimeError> {
@@ -237,7 +283,9 @@ impl RuntimeMonitor {
             if hook.memory_percent.is_some() {
                 agent.memory_percent = hook.memory_percent;
             }
-            if hook.summary.is_some() {
+            let preserve_failure =
+                hook.kind == RuntimeHookKind::SessionFinished && agent.status == "failed";
+            if hook.summary.is_some() && !preserve_failure {
                 agent.current_activity = hook.summary.clone();
             }
             match hook.kind {
@@ -257,7 +305,9 @@ impl RuntimeMonitor {
                 RuntimeHookKind::ConfidenceReported => {}
                 RuntimeHookKind::ErrorObserved => agent.status = "failed".to_owned(),
                 RuntimeHookKind::SessionFinished => {
-                    agent.status = "idle".to_owned();
+                    if !preserve_failure {
+                        agent.status = "idle".to_owned();
+                    }
                     agent.current_tool = None;
                 }
             }
@@ -346,127 +396,127 @@ impl RuntimeMonitor {
 
     pub async fn snapshot(&self) -> RuntimeSnapshot {
         let state = self.state.read().await;
-        let mut agents = BTreeMap::<String, RuntimeAgentTelemetry>::new();
-        let process_agent_ids = state
-            .hook_agents
-            .values()
-            .filter_map(|agent| agent.pid.map(|pid| (pid, agent.agent.agent_id.clone())))
-            .collect::<HashMap<_, _>>();
-
-        for process in state.processes.values() {
-            let agent_id = process_agent_ids
-                .get(&process.pid)
-                .cloned()
-                .unwrap_or_else(|| format!("process:{}:{}", process.provider, process.pid));
-            agents.insert(
-                agent_id.clone(),
-                RuntimeAgentTelemetry {
-                    agent_id,
-                    provider: process.provider.clone(),
-                    model: "unreported".to_owned(),
-                    instance_id: None,
-                    session_id: None,
-                    pid: Some(process.pid),
-                    status: process_state_label(&process.process_state).to_owned(),
-                    current_activity: None,
-                    current_tool: None,
-                    reported_confidence: None,
-                    confidence_source: "unreported".to_owned(),
-                    cpu_percent: process.cpu_percent,
-                    rss_bytes: Some(process.rss_bytes),
-                    memory_percent: process.memory_percent,
-                    resource_source: "host_process".to_owned(),
-                    input_tokens: 0,
-                    output_tokens: 0,
-                    process_backed: true,
-                    hook_backed: false,
-                    control_capable: false,
-                    last_hook_at: None,
-                    last_process_sample_at: Some(process.observed_at),
-                },
+        let generated_at = Utc::now();
+        let mut processes = state.processes.values().cloned().collect::<Vec<_>>();
+        let mut host_observers = Vec::with_capacity(state.host_observations.len());
+        for observation in state.host_observations.values() {
+            let stale = generated_at
+                .signed_duration_since(observation.observed_at)
+                .num_seconds()
+                > HOST_OBSERVER_STALE_AFTER_SECONDS;
+            host_observers.push(HostObserverStatus {
+                observer_id: observation.observer_id.clone(),
+                host_id: observation.host_id.clone(),
+                platform: observation.platform.clone(),
+                last_observed_at: observation.observed_at,
+                process_count: observation.processes.len(),
+                stale,
+            });
+            processes.extend(
+                observation
+                    .processes
+                    .iter()
+                    .map(|process| RuntimeProcessTelemetry {
+                        pid: process.pid,
+                        ppid: process.ppid,
+                        pgid: process.pgid,
+                        provider: process.provider.clone(),
+                        process_name: process.process_name.clone(),
+                        matched_pattern: "host_observer".to_owned(),
+                        process_role: Some(process.process_role.clone()),
+                        process_state: process.process_state.clone(),
+                        cpu_percent: process.cpu_percent,
+                        rss_bytes: process.rss_bytes,
+                        memory_percent: process.memory_percent,
+                        observed_at: observation.observed_at,
+                        source: "host_observer".to_owned(),
+                        observer_id: Some(observation.observer_id.clone()),
+                        host_id: Some(observation.host_id.clone()),
+                        platform: Some(observation.platform.clone()),
+                        stale,
+                    }),
             );
         }
+        host_observers.sort_by(|left, right| left.observer_id.cmp(&right.observer_id));
+        processes.sort_by(|left, right| {
+            left.host_id
+                .cmp(&right.host_id)
+                .then(left.pid.cmp(&right.pid))
+        });
 
+        let mut agents = Vec::<RuntimeAgentTelemetry>::with_capacity(state.hook_agents.len());
         for hook_agent in state.hook_agents.values() {
-            let process = hook_agent.pid.and_then(|pid| state.processes.get(&pid));
-            agents
-                .entry(hook_agent.agent.agent_id.clone())
-                .and_modify(|agent| {
-                    agent.provider = hook_agent.agent.provider.clone();
-                    agent.model = hook_agent.agent.model.clone();
-                    agent.instance_id = hook_agent.agent.instance_id.clone();
-                    agent.session_id = hook_agent.session_id.clone();
-                    agent.pid = hook_agent.pid.or(agent.pid);
-                    agent.status = hook_agent.status.clone();
-                    agent.current_activity = hook_agent.current_activity.clone();
-                    agent.current_tool = hook_agent.current_tool.clone();
-                    agent.reported_confidence = hook_agent.reported_confidence;
-                    agent.confidence_source = if hook_agent.reported_confidence.is_some() {
-                        "hook".to_owned()
-                    } else {
-                        "unreported".to_owned()
-                    };
-                    agent.input_tokens = hook_agent.input_tokens;
-                    agent.output_tokens = hook_agent.output_tokens;
-                    agent.hook_backed = true;
-                    agent.control_capable = hook_agent.control_capable;
-                    agent.last_hook_at = Some(hook_agent.last_hook_at);
-                })
-                .or_insert_with(|| {
-                    let hook_has_resource = hook_agent.cpu_percent.is_some()
-                        || hook_agent.rss_bytes.is_some()
-                        || hook_agent.memory_percent.is_some();
-                    RuntimeAgentTelemetry {
-                        agent_id: hook_agent.agent.agent_id.clone(),
-                        provider: hook_agent.agent.provider.clone(),
-                        model: hook_agent.agent.model.clone(),
-                        instance_id: hook_agent.agent.instance_id.clone(),
-                        session_id: hook_agent.session_id.clone(),
-                        pid: hook_agent.pid,
-                        status: hook_agent.status.clone(),
-                        current_activity: hook_agent.current_activity.clone(),
-                        current_tool: hook_agent.current_tool.clone(),
-                        reported_confidence: hook_agent.reported_confidence,
-                        confidence_source: if hook_agent.reported_confidence.is_some() {
+            let process = hook_agent.pid.and_then(|pid| {
+                processes
+                    .iter()
+                    .filter(|process| process.pid == pid && !process.stale)
+                    .max_by_key(|process| process.observed_at)
+            });
+            let hook_has_resource = hook_agent.cpu_percent.is_some()
+                || hook_agent.rss_bytes.is_some()
+                || hook_agent.memory_percent.is_some();
+            agents.push(RuntimeAgentTelemetry {
+                agent_id: hook_agent.agent.agent_id.clone(),
+                provider: hook_agent.agent.provider.clone(),
+                model: hook_agent.agent.model.clone(),
+                instance_id: hook_agent.agent.instance_id.clone(),
+                session_id: hook_agent.session_id.clone(),
+                pid: hook_agent.pid,
+                status: hook_agent.status.clone(),
+                current_activity: hook_agent.current_activity.clone(),
+                current_tool: hook_agent.current_tool.clone(),
+                reported_confidence: hook_agent.reported_confidence,
+                confidence_source: if hook_agent.reported_confidence.is_some() {
+                    "hook".to_owned()
+                } else {
+                    "unreported".to_owned()
+                },
+                cpu_percent: process
+                    .and_then(|value| value.cpu_percent)
+                    .or(hook_agent.cpu_percent),
+                rss_bytes: process
+                    .map(|value| value.rss_bytes)
+                    .or(hook_agent.rss_bytes),
+                memory_percent: process
+                    .and_then(|value| value.memory_percent)
+                    .or(hook_agent.memory_percent),
+                resource_source: process.map_or_else(
+                    || {
+                        if hook_has_resource {
                             "hook".to_owned()
                         } else {
                             "unreported".to_owned()
-                        },
-                        cpu_percent: process
-                            .and_then(|value| value.cpu_percent)
-                            .or(hook_agent.cpu_percent),
-                        rss_bytes: process
-                            .map(|value| value.rss_bytes)
-                            .or(hook_agent.rss_bytes),
-                        memory_percent: process
-                            .and_then(|value| value.memory_percent)
-                            .or(hook_agent.memory_percent),
-                        resource_source: if process.is_some() {
-                            "host_process".to_owned()
-                        } else if hook_has_resource {
-                            "hook".to_owned()
-                        } else {
-                            "unreported".to_owned()
-                        },
-                        input_tokens: hook_agent.input_tokens,
-                        output_tokens: hook_agent.output_tokens,
-                        process_backed: process.is_some(),
-                        hook_backed: true,
-                        control_capable: hook_agent.control_capable,
-                        last_hook_at: Some(hook_agent.last_hook_at),
-                        last_process_sample_at: process.map(|value| value.observed_at),
-                    }
-                });
+                        }
+                    },
+                    |process| process.source.clone(),
+                ),
+                input_tokens: hook_agent.input_tokens,
+                output_tokens: hook_agent.output_tokens,
+                process_backed: process.is_some(),
+                hook_backed: true,
+                control_capable: hook_agent.control_capable,
+                last_hook_at: Some(hook_agent.last_hook_at),
+                last_process_sample_at: process.map(|value| value.observed_at),
+            });
         }
 
-        let agents = agents.into_values().collect::<Vec<_>>();
+        agents.sort_by(|left, right| left.agent_id.cmp(&right.agent_id));
         let recent_commands = state.commands.iter().cloned().collect::<Vec<_>>();
         let totals = RuntimeTotals {
             agents: agents.len(),
+            observed_processes: processes.len(),
             process_backed_agents: agents.iter().filter(|agent| agent.process_backed).count(),
             hook_backed_agents: agents.iter().filter(|agent| agent.hook_backed).count(),
-            cpu_percent: agents.iter().filter_map(|agent| agent.cpu_percent).sum(),
-            rss_bytes: agents.iter().filter_map(|agent| agent.rss_bytes).sum(),
+            cpu_percent: processes
+                .iter()
+                .filter(|process| !process.stale)
+                .filter_map(|process| process.cpu_percent)
+                .sum(),
+            rss_bytes: processes
+                .iter()
+                .filter(|process| !process.stale)
+                .map(|process| process.rss_bytes)
+                .sum(),
             input_tokens: agents.iter().map(|agent| agent.input_tokens).sum(),
             output_tokens: agents.iter().map(|agent| agent.output_tokens).sum(),
             confidence_reported_agents: agents
@@ -482,11 +532,8 @@ impl RuntimeMonitor {
                 .filter(|command| command.status == ControlStatus::Pending)
                 .count(),
         };
-        let mut processes = state.processes.values().cloned().collect::<Vec<_>>();
-        processes.sort_by_key(|process| process.pid);
-
         RuntimeSnapshot {
-            generated_at: Utc::now(),
+            generated_at,
             collection: RuntimeCollectionStatus {
                 configured: self.config.process_collection_enabled,
                 enabled: self.collection_enabled(),
@@ -502,6 +549,7 @@ impl RuntimeMonitor {
             totals,
             agents,
             processes,
+            host_observers,
             recent_hooks: state
                 .hooks
                 .iter()
@@ -518,15 +566,4 @@ impl RuntimeMonitor {
 
 fn duration_millis(duration: Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
-}
-
-fn process_state_label(state: &str) -> &'static str {
-    match state {
-        "R" => "running",
-        "S" | "D" | "I" => "waiting",
-        "T" | "t" => "stopped",
-        "Z" => "zombie",
-        "X" | "x" => "dead",
-        _ => "observed",
-    }
 }

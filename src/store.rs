@@ -8,6 +8,7 @@ use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
 use crate::{
+    bridge::BridgeHub,
     config::CacheConfig,
     model::{
         AgentEvent, AgentRef, AgentStatus, ErrorObservation, EventEnvelope, Goal, Lesson,
@@ -20,6 +21,7 @@ const SNAPSHOT_EVENT_LIMIT: usize = 250;
 #[derive(Clone)]
 pub struct Store {
     state: Arc<StoreState>,
+    bridge: BridgeHub,
 }
 
 impl fmt::Debug for Store {
@@ -258,7 +260,12 @@ impl Store {
                 inner: RwLock::new(inner),
                 updates,
             }),
+            bridge: BridgeHub::new(),
         }
+    }
+
+    pub fn bridge(&self) -> BridgeHub {
+        self.bridge.clone()
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<StoreUpdate> {

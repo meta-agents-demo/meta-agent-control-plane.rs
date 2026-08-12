@@ -423,7 +423,7 @@ async fn ui_websocket(
         .into_response()
 }
 
-fn websocket_origin_allowed(headers: &HeaderMap, cors_any: bool) -> bool {
+pub(crate) fn websocket_origin_allowed(headers: &HeaderMap, cors_any: bool) -> bool {
     if cors_any {
         return true;
     }

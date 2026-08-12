@@ -264,6 +264,46 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/bridge/rooms": {
+      "get": {
+        "summary": "List bounded bridge rooms",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Bridge room summaries"}, "401": {"description": "Authentication failed"}}
+      },
+      "post": {
+        "summary": "Create an idempotent shared bridge room",
+        "security": [{"bearerAuth": []}],
+        "responses": {"201": {"description": "Room created or returned"}, "400": {"description": "Invalid room"}, "401": {"description": "Authentication failed"}}
+      }
+    },
+    "/api/v1/bridge/rooms/{room_slug}": {
+      "get": {
+        "summary": "Read a bridge room snapshot",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Room, participants, messages, contacts, and transport counters"}, "401": {"description": "Authentication failed"}, "404": {"description": "Room not found"}}
+      }
+    },
+    "/api/v1/bridge/rooms/{room_slug}/join": {
+      "post": {
+        "summary": "Declare a participant in a bridge room",
+        "description": "Identity is scoped to the authenticated local control-plane boundary and is not a provider-issued assertion.",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Participant joined"}, "400": {"description": "Invalid participant"}, "401": {"description": "Authentication failed"}}
+      }
+    },
+    "/api/v1/bridge/rooms/{room_slug}/messages": {
+      "get": {
+        "summary": "Read retained visible bridge summaries",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Bounded visible message summaries"}, "401": {"description": "Authentication failed"}}
+      },
+      "post": {
+        "summary": "Post a joined participant message over HTTP",
+        "description": "Accepts explicit visible summaries only; credential-like text and participant identity mismatches are rejected.",
+        "security": [{"bearerAuth": []}],
+        "responses": {"202": {"description": "Message accepted"}, "400": {"description": "Invalid bridge message"}, "401": {"description": "Authentication failed"}}
+      }
+    },
     "/api/v1/coordination": {
       "get": {
         "description": "Returns bounded dependency-safe assignments, operator interventions, and held tasks derived from visible retained state. The endpoint is read-only and never dispatches or mutates agent work.",
@@ -494,6 +534,56 @@
         }
       }
     },
+    "/api/v1/runtime/collection": {
+      "post": {
+        "summary": "Enable or pause the local Linux process collector",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Collector state changed"}, "401": {"description": "Authentication failed"}}
+      }
+    },
+    "/api/v1/runtime/commands": {
+      "post": {
+        "summary": "Queue a cooperative command for a hook-capable agent",
+        "security": [{"bearerAuth": []}],
+        "responses": {"202": {"description": "Command queued"}, "401": {"description": "Authentication failed"}, "409": {"description": "Agent is not control capable"}}
+      }
+    },
+    "/api/v1/runtime/commands/ack": {
+      "post": {
+        "summary": "Acknowledge a cooperative command",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Acknowledgement recorded"}, "401": {"description": "Authentication failed"}, "404": {"description": "Command not found"}}
+      }
+    },
+    "/api/v1/runtime/commands/poll": {
+      "post": {
+        "summary": "Poll pending cooperative commands",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Pending commands"}, "401": {"description": "Authentication failed"}}
+      }
+    },
+    "/api/v1/runtime/hooks": {
+      "post": {
+        "summary": "Ingest an explicit provider or wrapper runtime hook",
+        "security": [{"bearerAuth": []}],
+        "responses": {"202": {"description": "Hook accepted"}, "400": {"description": "Invalid hook"}, "401": {"description": "Authentication failed"}}
+      }
+    },
+    "/api/v1/runtime/host-observations": {
+      "post": {
+        "summary": "Ingest a privacy-minimized native host process sample",
+        "description": "Fixed process identity, lineage, CPU, and RSS fields only; command arguments, environments, prompts, and credentials are outside this contract.",
+        "security": [{"bearerAuth": []}],
+        "responses": {"202": {"description": "Host observation accepted"}, "400": {"description": "Invalid or out-of-order observation"}, "401": {"description": "Authentication failed"}}
+      }
+    },
+    "/api/v1/runtime/snapshot": {
+      "get": {
+        "summary": "Read real process and explicit hook telemetry",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Current runtime snapshot"}, "401": {"description": "Authentication failed"}}
+      }
+    },
     "/healthz": {
       "get": {
         "summary": "Liveness probe",
@@ -527,6 +617,13 @@
             "description": "Ready"
           }
         }
+      }
+    },
+    "/ws/bridge/{room_slug}": {
+      "get": {
+        "summary": "Authenticated bridge room WebSocket",
+        "description": "Authenticate, join a declared participant, then exchange visible summaries and room updates.",
+        "security": [{"bearerAuth": []}]
       }
     },
     "/ws/agent": {
