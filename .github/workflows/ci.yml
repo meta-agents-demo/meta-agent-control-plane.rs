@@ -34,7 +34,7 @@ jobs:
           components: rustfmt,clippy
 
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@a45951ff880207c249adf57334cf2e9bd81d6e1e # verified upstream 2026-08-10
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # verified upstream 2026-08-10
         with:
           shared-key: meta-agent-control-plane
 
