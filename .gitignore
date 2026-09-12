@@ -28,3 +28,6 @@ node_modules/
 # Repository-local temporary data and authorized Git worktrees
 tmp/worktrees
 temp/worktrees
+# Sanctioned scratch locations - AGENTS.md requires both, trailing-slash form
+tmp/
+temp/
