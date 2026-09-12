@@ -24,3 +24,7 @@ node_modules/
 /env/enc/*
 !/env/enc/dev.env.enc
 !/env/enc/prod.env.enc
+
+# Sanctioned scratch locations - AGENTS.md requires both, trailing-slash form
+tmp/
+temp/
