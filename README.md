@@ -10,6 +10,7 @@ The server is provider-neutral. OpenAI API-backed agents, Anthropic/Claude-backe
 
 - **HTTP JSON** — reliable event ingestion at `POST /api/v1/events`.
 - **WebSocket** — reliable interactive ingestion at `/ws/agent`.
+- **Agent bridge** — authenticated human/Claude/Codex rooms over HTTP, WebSocket, and TCP with explicit contact points and native host-process provenance. See [docs/agent-bridge.md](docs/agent-bridge.md).
 - **TCP NDJSON** — reliable local-daemon or sidecar ingestion.
 - **UDP JSON** — best-effort, low-authority telemetry only.
 
@@ -175,6 +176,10 @@ Agent registration, goal/task definitions, task start/completion, and learned le
 | `/api/v1/coordination` | Deterministic dependency-safe coordination plan |
 | `/api/v1/events` | HTTP event ingestion |
 | `/ws/agent` | Agent ingestion socket |
+| `/bridge` | Human and AI shared-room dashboard |
+| `/api/v1/bridge/rooms` | Protected bridge room list/create API |
+| `/api/v1/runtime/host-observations` | Protected privacy-minimized native process samples |
+| `/ws/bridge/{room_slug}` | Protected bridge room WebSocket |
 | `/ws/ui` | Authenticated revision invalidation stream for operator pages |
 
 ## Configuration
