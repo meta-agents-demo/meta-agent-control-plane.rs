@@ -16,6 +16,7 @@ pub fn dashboard(reads_protected: bool) -> String {
                 </div>
                 <nav aria-label="Analytics views">
                     <a href="/">"Overview"</a>
+                    <a href="/bridge">"Bridge"</a>
                     <a href="/explorer">"Explorer"</a>
                     <a href="/metacognition">"Metacognition"</a>
                     <a href="/coordination">"Coordination"</a>
@@ -41,7 +42,7 @@ pub fn dashboard(reads_protected: bool) -> String {
                     <div>
                         <p class="eyebrow">"REAL HOST + HOOK TELEMETRY"</p>
                         <h1>"Live agent runtime"</h1>
-                        <p class="lede">"CPU and RSS from host process counters, plus explicit activity, confidence, token usage, and cooperative controls from Gemini, ChatGPT/OpenAI, and Claude agent hooks."</p>
+                        <p class="lede">"CPU and RSS from native host observations and Linux process counters, plus explicit activity, confidence, token usage, and cooperative controls from Gemini, ChatGPT/OpenAI, and Claude agent hooks."</p>
                     </div>
                     <div id="connection" class="connection offline"><span></span><div><strong id="connection-label">"Connecting"</strong><small>{protection}</small></div></div>
                 </header>
@@ -56,10 +57,10 @@ pub fn dashboard(reads_protected: bool) -> String {
                 <section id="error-banner" class="error" hidden></section>
 
                 <section class="stats" data-panel-id="summary">
-                    <article class="panel"><span>"Agents"</span><strong id="stat-agents">"0"</strong></article>
+                    <article class="panel"><span>"Hook agents"</span><strong id="stat-agents">"0"</strong></article>
                     <article class="panel"><span>"Observed CPU"</span><strong id="stat-cpu">"0%"</strong></article>
                     <article class="panel"><span>"Observed RSS"</span><strong id="stat-rss">"0 B"</strong></article>
-                    <article class="panel"><span>"Hook-backed"</span><strong id="stat-hooks">"0"</strong></article>
+                    <article class="panel"><span>"Host processes"</span><strong id="stat-hooks">"0"</strong></article>
                     <article class="panel"><span>"Confidence reported"</span><strong id="stat-confidence">"0/0"</strong></article>
                     <article class="panel"><span>"Pending controls"</span><strong id="stat-commands">"0"</strong></article>
                 </section>
@@ -73,16 +74,16 @@ pub fn dashboard(reads_protected: bool) -> String {
                         <dl><dt>"Host capacity"</dt><dd id="collection-host">"unknown"</dd></dl>
                     </div>
                     <p id="collection-error" class="warning" hidden></p>
-                    <p class="note">"Linux containers can read a read-only host /proc mount. Docker Desktop on macOS and Windows cannot expose native host processes this way, so those hosts use the same explicit runtime-hook endpoint while the server remains containerized."</p>
+                    <p class="note">"Linux containers can read a read-only host /proc mount. Docker Desktop cannot expose native macOS processes this way, so a privacy-minimized native observer posts fixed ps columns to the dedicated host-observation endpoint; command arguments and environments are never collected."</p>
                 </section>
 
                 <section class="panel padded" data-panel-id="agents">
-                    <div class="title"><div><h2>"Agent inventory"</h2><span>"Merged by hook-declared PID when available"</span></div></div>
-                    <div class="table-wrap"><table><thead><tr><th>"Agent"</th><th>"Provider / model"</th><th>"PID"</th><th>"Status"</th><th>"CPU"</th><th>"RSS"</th><th>"Confidence"</th><th>"Sources"</th><th>"Last seen"</th></tr></thead><tbody id="agent-rows"><tr><td colspan="9" class="empty">"Loading real agent data…"</td></tr></tbody></table></div>
+                    <div class="title"><div><h2>"Agent inventory"</h2><span>"Hook-declared agents; resources merge only while the reported PID is observed"</span></div></div>
+                    <div class="table-wrap"><table><thead><tr><th>"Agent"</th><th>"Provider / model"</th><th>"Reported PID"</th><th>"Status"</th><th>"CPU"</th><th>"RSS"</th><th>"Confidence"</th><th>"Sources"</th><th>"Last seen"</th></tr></thead><tbody id="agent-rows"><tr><td colspan="9" class="empty">"Loading real agent data…"</td></tr></tbody></table></div>
                 </section>
 
                 <section class="panel padded" data-panel-id="resources">
-                    <div class="title"><div><h2>"CPU and memory"</h2><span>"Delta CPU from /proc counters; RSS from process status"</span></div></div>
+                    <div class="title"><div><h2>"CPU and memory"</h2><span>"Source-labelled samples only; hook-only agents remain explicitly unavailable"</span></div></div>
                     <div id="resource-cards" class="metric-grid"><p class="empty">"Loading resource samples…"</p></div>
                 </section>
 
@@ -114,8 +115,8 @@ pub fn dashboard(reads_protected: bool) -> String {
                 </section>
 
                 <section class="panel padded" data-panel-id="processes">
-                    <div class="title"><div><h2>"Matched host processes"</h2><span>"Command arguments are used only for matching and are not returned"</span></div></div>
-                    <div class="table-wrap"><table><thead><tr><th>"PID"</th><th>"Process"</th><th>"Provider"</th><th>"Pattern"</th><th>"Kernel state"</th><th>"CPU"</th><th>"RSS"</th></tr></thead><tbody id="process-rows"><tr><td colspan="7" class="empty">"Loading process samples…"</td></tr></tbody></table></div>
+                    <div class="title"><div><h2>"Observed host processes"</h2><span>"Native observer provenance, lineage, resource sample, and freshness"</span></div></div>
+                    <div class="table-wrap"><table><thead><tr><th>"PID"</th><th>"Parent / group"</th><th>"Process"</th><th>"Provider"</th><th>"Role"</th><th>"Source"</th><th>"State"</th><th>"CPU"</th><th>"RSS"</th><th>"Observed"</th></tr></thead><tbody id="process-rows"><tr><td colspan="10" class="empty">"Loading process samples…"</td></tr></tbody></table></div>
                 </section>
             </main>
         </div>
@@ -148,6 +149,9 @@ mod tests {
         assert!(html.contains("href=\"/explorer\""));
         assert!(html.contains("href=\"/metacognition\""));
         assert!(html.contains("href=\"/coordination\""));
+        assert!(html.contains("Reported PID"));
+        assert!(html.contains("not process-backed"));
+        assert!(!html.contains("Delta CPU from /proc counters"));
         assert!(!html.contains("Math.random"));
         assert!(!html.contains("meta-agent-read-token="));
     }
