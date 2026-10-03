@@ -3,7 +3,7 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    coordination_api, explorer_api,
+    bridge_api, coordination_api, explorer_api,
     http::{self, AppState},
     metacognition_api,
     runtime::RuntimeMonitor,
@@ -16,6 +16,7 @@ pub fn router(state: AppState) -> Router {
 
 fn router_with_runtime(state: AppState, runtime: RuntimeMonitor) -> Router {
     http::router(state.clone())
+        .merge(bridge_api::router(state.clone()))
         .merge(metacognition_api::router(state.clone()))
         .merge(coordination_api::router(state.clone()))
         .merge(explorer_api::router(state.clone()))
@@ -81,6 +82,7 @@ mod tests {
             "/coordination",
             "/explorer",
             "/runtime",
+            "/bridge",
         ] {
             let response = app
                 .clone()
@@ -95,6 +97,7 @@ mod tests {
             "/api/v1/explorer",
             "/api/v1/timeline",
             "/api/v1/runtime/snapshot",
+            "/api/v1/bridge/rooms",
         ] {
             let response = app
                 .clone()
