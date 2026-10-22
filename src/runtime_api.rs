@@ -13,8 +13,8 @@ use crate::{
     auth::bearer_token,
     http::AppState,
     runtime::{
-        ControlCommand, ControlCommandAck, ControlCommandRequest, RuntimeError,
-        RuntimeHookEnvelope, RuntimeMonitor, RuntimeSnapshot,
+        ControlCommand, ControlCommandAck, ControlCommandRequest, HostProcessObservationEnvelope,
+        RuntimeError, RuntimeHookEnvelope, RuntimeMonitor, RuntimeSnapshot,
     },
     runtime_ui,
 };
@@ -99,17 +99,61 @@ struct HookAck {
     duplicate: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct HostObservationAck {
+    observation_id: Uuid,
+    accepted: bool,
+    duplicate: bool,
+}
+
 pub fn router(state: AppState, runtime: RuntimeMonitor) -> Router {
     Router::new()
         .route("/runtime", get(page))
         .route("/api/v1/runtime/snapshot", get(snapshot))
         .route("/api/v1/runtime/hooks", post(ingest_hook))
+        .route(
+            "/api/v1/runtime/host-observations",
+            post(ingest_host_observation),
+        )
         .route("/api/v1/runtime/collection", post(set_collection))
         .route("/api/v1/runtime/commands", post(enqueue_command))
         .route("/api/v1/runtime/commands/poll", post(pending_commands))
         .route("/api/v1/runtime/commands/ack", post(acknowledge_command))
         .layer(Extension(runtime))
         .with_state(state)
+}
+
+async fn ingest_host_observation(
+    State(state): State<AppState>,
+    Extension(runtime): Extension<RuntimeMonitor>,
+    headers: HeaderMap,
+    payload: Result<Json<HostProcessObservationEnvelope>, JsonRejection>,
+) -> Result<impl IntoResponse, ApiError> {
+    authorize_ingest(&state, &headers)?;
+    let Json(observation) =
+        payload.map_err(|_| ApiError::BadRequest("Invalid host process observation JSON"))?;
+    let observation_id = observation.observation_id;
+    match runtime.ingest_host_observation(observation).await {
+        Ok(()) => Ok((
+            StatusCode::ACCEPTED,
+            Json(HostObservationAck {
+                observation_id,
+                accepted: true,
+                duplicate: false,
+            }),
+        )),
+        Err(RuntimeError::DuplicateHostObservation) => Ok((
+            StatusCode::OK,
+            Json(HostObservationAck {
+                observation_id,
+                accepted: true,
+                duplicate: true,
+            }),
+        )),
+        Err(_) => Err(ApiError::BadRequest(
+            "Host process observation failed validation",
+        )),
+    }
 }
 
 async fn page(State(state): State<AppState>) -> Html<String> {
@@ -249,7 +293,10 @@ mod tests {
         auth::AuthPolicy,
         config::Config,
         daemon::BoundAddresses,
-        runtime::{RUNTIME_PROTOCOL_VERSION, RuntimeAgentRef, RuntimeConfig, RuntimeHookKind},
+        runtime::{
+            HostProcessObservation, HostProcessObservationEnvelope, RUNTIME_PROTOCOL_VERSION,
+            RuntimeAgentRef, RuntimeConfig, RuntimeHookKind,
+        },
         store::Store,
     };
 
@@ -315,6 +362,29 @@ mod tests {
             input_tokens_delta: 20,
             output_tokens_delta: 8,
             metadata: Default::default(),
+        }
+    }
+
+    fn host_observation() -> HostProcessObservationEnvelope {
+        HostProcessObservationEnvelope {
+            protocol_version: RUNTIME_PROTOCOL_VERSION.to_owned(),
+            observation_id: Uuid::new_v4(),
+            observed_at: Utc::now(),
+            observer_id: "macos-ps:test-host".to_owned(),
+            host_id: "test-host".to_owned(),
+            platform: "darwin-arm64".to_owned(),
+            processes: vec![HostProcessObservation {
+                pid: 42,
+                ppid: Some(1),
+                pgid: Some(42),
+                provider: "openai".to_owned(),
+                process_name: "codex".to_owned(),
+                process_role: "agent_cli".to_owned(),
+                process_state: "S".to_owned(),
+                cpu_percent: Some(2.5),
+                rss_bytes: 8 * 1_024 * 1_024,
+                memory_percent: Some(0.1),
+            }],
         }
     }
 
@@ -384,6 +454,40 @@ mod tests {
         assert_eq!(snapshot.agents[0].resource_source, "hook");
         assert!(snapshot.agents[0].control_capable);
         assert_eq!(snapshot.agents[0].input_tokens, 20);
+    }
+
+    #[tokio::test]
+    async fn host_process_observations_preserve_provenance_and_resources() {
+        let runtime = test_runtime();
+        let app = router(test_state(), runtime);
+        let observation = host_observation();
+        let response = app
+            .clone()
+            .oneshot(authorized_request(
+                Method::POST,
+                "/api/v1/runtime/host-observations",
+                Body::from(serde_json::to_vec(&observation).unwrap()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+        let response = app
+            .oneshot(authorized_request(
+                Method::GET,
+                "/api/v1/runtime/snapshot",
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let snapshot: RuntimeSnapshot = serde_json::from_slice(&body).unwrap();
+        assert_eq!(snapshot.totals.observed_processes, 1);
+        assert_eq!(snapshot.host_observers.len(), 1);
+        assert!(!snapshot.host_observers[0].stale);
+        assert_eq!(snapshot.processes[0].source, "host_observer");
+        assert_eq!(snapshot.processes[0].host_id.as_deref(), Some("test-host"));
+        assert_eq!(snapshot.processes[0].rss_bytes, 8 * 1_024 * 1_024);
     }
 
     #[tokio::test]
