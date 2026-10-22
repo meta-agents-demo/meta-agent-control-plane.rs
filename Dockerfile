@@ -3,7 +3,7 @@ WORKDIR /workspace
 COPY . .
 RUN cargo build --locked --release --bin meta-agent-control-plane
 
-FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241 AS runtime
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS runtime
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.source="https://github.com/meta-agents-demo/meta-agent-control-plane.rs" \
       org.opencontainers.image.revision="${VCS_REF}"
