@@ -25,6 +25,7 @@ pub fn dashboard(addresses: BoundAddresses, reads_protected: bool) -> String {
                 </div>
                 <div class="hero-actions">
                     <nav class="hero-nav" aria-label="Analytics views">
+                        <a href="/bridge">"Bridge"</a>
                         <a href="/runtime">"Runtime"</a>
                         <a href="/explorer">"Explorer"</a>
                         <a href="/metacognition">"Metacognition"</a>
@@ -51,8 +52,8 @@ pub fn dashboard(addresses: BoundAddresses, reads_protected: bool) -> String {
             <section id="error-banner" class="error-banner hidden"></section>
 
             <section class="stat-grid">
-                <article class="stat panel"><span>"Agents"</span><strong id="stat-agents">"0"</strong></article>
-                <article class="stat panel"><span>"Active tasks"</span><strong id="stat-active">"0"</strong></article>
+                <article class="stat panel"><span>"Event agents"</span><strong id="stat-agents">"0"</strong></article>
+                <article class="stat panel"><span>"Open event tasks"</span><strong id="stat-active">"0"</strong></article>
                 <article class="stat panel"><span>"Lessons"</span><strong id="stat-lessons">"0"</strong></article>
                 <article class="stat panel"><span>"Revision"</span><strong id="stat-revision">"0"</strong></article>
                 <article class="stat panel"><span>"Accepted"</span><strong id="stat-accepted">"0"</strong></article>
@@ -61,7 +62,7 @@ pub fn dashboard(addresses: BoundAddresses, reads_protected: bool) -> String {
 
             <section class="two-column">
                 <article class="panel padded">
-                    <div class="section-title"><h2>"Agents"</h2><span>"Live state and latest reflection"</span></div>
+                    <div class="section-title"><h2>"Event agents"</h2><span>"Explicit domain events, separate from OS process discovery"</span></div>
                     <div id="agents" class="card-list empty-state">"No agents have checked in."</div>
                 </article>
                 <article class="panel padded">
