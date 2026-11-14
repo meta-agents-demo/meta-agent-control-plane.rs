@@ -106,7 +106,7 @@ async fn merges_hook_confidence_and_tokens_with_process_telemetry() {
     assert!(agent.process_backed);
     assert!(agent.hook_backed);
     assert!(agent.control_capable);
-    assert_eq!(agent.resource_source, "host_process");
+    assert_eq!(agent.resource_source, "linux_proc");
     assert_eq!(agent.reported_confidence, Some(0.75));
     assert_eq!(agent.confidence_source, "hook");
     assert_eq!(agent.input_tokens, 10);
@@ -164,6 +164,28 @@ async fn older_hooks_do_not_replace_current_activity_or_resources() {
     assert_eq!(snapshot.agents[0].reported_confidence, Some(0.9));
     assert_eq!(snapshot.agents[0].cpu_percent, Some(12.0));
     assert_eq!(snapshot.agents[0].input_tokens, 20);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn session_finish_preserves_the_latest_provider_failure() {
+    let root = temp_proc_root();
+    let monitor = RuntimeMonitor::new(RuntimeConfig::test(root.clone()));
+    let mut failed = hook(Uuid::new_v4(), RuntimeHookKind::ErrorObserved);
+    failed.summary = Some("Provider credit or access failure".to_owned());
+    monitor.ingest_hook(failed.clone()).await.unwrap();
+
+    let mut finished = hook(Uuid::new_v4(), RuntimeHookKind::SessionFinished);
+    finished.occurred_at = failed.occurred_at + chrono::Duration::milliseconds(1);
+    finished.summary = Some("Bounded run finished".to_owned());
+    monitor.ingest_hook(finished).await.unwrap();
+
+    let snapshot = monitor.snapshot().await;
+    assert_eq!(snapshot.agents[0].status, "failed");
+    assert_eq!(
+        snapshot.agents[0].current_activity.as_deref(),
+        Some("Provider credit or access failure")
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
