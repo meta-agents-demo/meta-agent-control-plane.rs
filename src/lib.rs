@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
 pub mod auth;
+pub mod bridge;
+pub mod bridge_api;
+pub mod bridge_ui;
 pub mod client;
 pub mod config;
 pub mod coordination;

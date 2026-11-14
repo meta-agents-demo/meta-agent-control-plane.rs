@@ -14,6 +14,9 @@
     maximumFractionDigits: digits
   });
   const percent = (value) => value == null ? 'warming up' : `${number(value)}%`;
+  const agentPercent = (agent, value) => value == null
+    ? (agent.process_backed ? 'warming up' : 'not process-backed')
+    : `${number(value)}%`;
   const confidence = (value) => value == null ? 'unreported' : `${Math.round(Number(value) * 100)}%`;
   const bytes = (value) => {
     let amount = Number(value || 0);
@@ -92,11 +95,11 @@
     $('stat-agents').textContent = totals.agents;
     $('stat-cpu').textContent = percent(totals.cpu_percent);
     $('stat-rss').textContent = bytes(totals.rss_bytes);
-    $('stat-hooks').textContent = totals.hook_backed_agents;
+    $('stat-hooks').textContent = totals.observed_processes;
     $('stat-confidence').textContent = `${totals.confidence_reported_agents}/${totals.agents}`;
     $('stat-commands').textContent = totals.pending_commands;
     $('last-updated').textContent = `Updated ${time(snapshot.generated_at)}`;
-    renderCollection(snapshot.collection);
+    renderCollection(snapshot.collection, snapshot.host_observers || []);
     renderAgents(snapshot.agents);
     renderResources(snapshot.agents);
     renderActivity(snapshot.agents);
@@ -107,13 +110,20 @@
     renderProcesses(snapshot.processes);
   }
 
-  function renderCollection(collection) {
-    $('collection-state').textContent = collection.enabled ? 'collection enabled' : 'collection paused';
-    $('collection-toggle').textContent = collection.enabled ? 'Pause collection' : 'Resume collection';
-    $('collection-source').textContent = `${collection.proc_root} · every ${collection.sample_interval_ms} ms`;
+  function renderCollection(collection, hostObservers) {
+    const nativeLive = hostObservers.some((observer) => !observer.stale);
+    $('collection-state').textContent = nativeLive
+      ? `native observer live · Linux collector ${collection.enabled ? 'enabled' : 'paused'}`
+      : collection.enabled ? 'Linux collection enabled' : 'collection paused';
+    $('collection-toggle').textContent = collection.enabled ? 'Pause Linux collector' : 'Resume Linux collector';
+    const native = hostObservers.map((observer) => `${observer.observer_id}${observer.stale ? ' (stale)' : ''}`).join(', ');
+    $('collection-source').textContent = native || `${collection.proc_root} · every ${collection.sample_interval_ms} ms`;
     $('collection-patterns').textContent = collection.process_patterns.join(', ');
-    $('collection-sample').textContent = time(collection.last_sample_at);
-    $('collection-host').textContent = `${collection.cpu_count || 0} CPU(s) · ${collection.memory_total_bytes ? bytes(collection.memory_total_bytes) : 'memory unavailable'}`;
+    const latestNative = hostObservers.reduce((latest, observer) => !latest || new Date(observer.last_observed_at) > new Date(latest) ? observer.last_observed_at : latest, null);
+    $('collection-sample').textContent = time(latestNative || collection.last_sample_at);
+    $('collection-host').textContent = hostObservers.length
+      ? `${hostObservers.length} native observer(s) · ${hostObservers.reduce((total, observer) => total + observer.process_count, 0)} matched process(es)`
+      : `${collection.cpu_count || 0} CPU(s) · ${collection.memory_total_bytes ? bytes(collection.memory_total_bytes) : 'memory unavailable'}`;
     const error = $('collection-error');
     if (collection.last_error) {
       error.textContent = `${collection.last_error} (${collection.collection_errors} errors)`;
@@ -134,7 +144,7 @@
       <td>${esc(agent.provider)}<small>${esc(agent.model)}</small></td>
       <td>${agent.pid == null ? 'hook only' : esc(agent.pid)}</td>
       <td><span class="status">${esc(agent.status)}</span></td>
-      <td>${percent(agent.cpu_percent)}</td>
+      <td>${agentPercent(agent, agent.cpu_percent)}</td>
       <td>${agent.rss_bytes == null ? 'unavailable' : bytes(agent.rss_bytes)}</td>
       <td><span class="confidence ${agent.reported_confidence == null ? 'muted' : ''}">${confidence(agent.reported_confidence)}</span></td>
       <td>${agent.hook_backed ? 'hook' : 'process'}${agent.process_backed && agent.hook_backed ? ' + process' : ''}<small>resources: ${esc(agent.resource_source || 'unreported')}</small></td>
@@ -153,7 +163,7 @@
       const memory = Math.max(0, Math.min(100, Number(agent.memory_percent || 0)));
       return `<article class="metric-card">
         <div class="metric-title"><strong>${esc(agent.agent_id)}</strong><span>${esc(agent.provider)}</span></div>
-        <label>CPU <span>${percent(agent.cpu_percent)}</span></label>
+        <label>CPU <span>${agentPercent(agent, agent.cpu_percent)}</span></label>
         <div class="bar"><span style="width:${cpu}%"></span></div>
         <label>Host memory <span>${agent.memory_percent == null ? 'unavailable' : percent(agent.memory_percent)}</span></label>
         <div class="bar memory"><span style="width:${memory}%"></span></div>
@@ -251,11 +261,11 @@
   function renderProcesses(processes) {
     const target = $('process-rows');
     if (!processes.length) {
-      target.innerHTML = '<tr><td colspan="7" class="empty">No configured agent process pattern matched.</td></tr>';
+      target.innerHTML = '<tr><td colspan="10" class="empty">No configured agent process pattern matched.</td></tr>';
       return;
     }
     target.innerHTML = processes.map((process) => `<tr>
-      <td>${process.pid}</td><td>${esc(process.process_name)}</td><td>${esc(process.provider)}</td><td>${esc(process.matched_pattern)}</td><td>${esc(process.process_state)}</td><td>${percent(process.cpu_percent)}</td><td>${bytes(process.rss_bytes)}</td>
+      <td>${process.pid}</td><td>${esc(process.ppid ?? '—')} / ${esc(process.pgid ?? '—')}</td><td>${esc(process.process_name)}</td><td>${esc(process.provider)}</td><td>${esc(process.process_role || process.matched_pattern)}</td><td>${esc(process.source || 'linux_proc')}<small>${esc(process.host_id || 'container')}</small></td><td>${esc(process.process_state)}</td><td>${percent(process.cpu_percent)}</td><td>${bytes(process.rss_bytes)}</td><td>${time(process.observed_at)}${process.stale ? '<small>stale</small>' : ''}</td>
     </tr>`).join('');
   }
 

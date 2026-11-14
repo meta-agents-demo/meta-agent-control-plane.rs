@@ -14,7 +14,7 @@ pub fn dashboard(reads_protected: bool) -> String {
                     <h1>"Operator explorer"</h1>
                     <p class="lede">"Agents, retained sessions, event timeline, learned lessons, and bounded memory pressure from one coherent snapshot."</p>
                 </div>
-                <nav aria-label="Analytics views"><a href="/">"Overview"</a><a href="/runtime">"Runtime"</a><a href="/metacognition">"Metacognition"</a><a href="/coordination">"Coordination"</a></nav>
+                <nav aria-label="Analytics views"><a href="/">"Overview"</a><a href="/bridge">"Bridge"</a><a href="/runtime">"Runtime"</a><a href="/metacognition">"Metacognition"</a><a href="/coordination">"Coordination"</a></nav>
             </header>
 
             <section class="toolbar panel">

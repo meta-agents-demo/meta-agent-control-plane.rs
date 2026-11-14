@@ -36,15 +36,27 @@ if RUST_UDP_KINDS != OPENAPI_UDP_KINDS:
     )
 
 required_paths = {
+    "/api/v1/bridge/rooms",
+    "/api/v1/bridge/rooms/{room_slug}",
+    "/api/v1/bridge/rooms/{room_slug}/join",
+    "/api/v1/bridge/rooms/{room_slug}/messages",
     "/api/v1/coordination",
     "/api/v1/events",
     "/api/v1/explorer",
     "/api/v1/metacognition",
     "/api/v1/snapshot",
+    "/api/v1/runtime/collection",
+    "/api/v1/runtime/commands",
+    "/api/v1/runtime/commands/ack",
+    "/api/v1/runtime/commands/poll",
+    "/api/v1/runtime/hooks",
+    "/api/v1/runtime/host-observations",
+    "/api/v1/runtime/snapshot",
     "/healthz",
     "/readyz",
     "/metrics",
     "/ws/agent",
+    "/ws/bridge/{room_slug}",
     "/ws/ui",
 }
 missing_paths = required_paths - set(OPENAPI["paths"])
