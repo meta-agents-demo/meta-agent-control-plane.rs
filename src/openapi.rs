@@ -30,6 +30,67 @@ pub fn document(
         },
         "servers": [{ "url": "/", "description": "Same-origin daemon API" }],
         "paths": {
+            "/api/v1/bridge/rooms": {
+                "get": {
+                    "summary": "List bounded bridge rooms",
+                    "security": read_security.clone(),
+                    "responses": {
+                        "200": { "description": "Bridge room summaries" },
+                        "401": { "description": "Read API authentication failed" }
+                    }
+                },
+                "post": {
+                    "summary": "Create an idempotent shared bridge room",
+                    "security": ingestion_security.clone(),
+                    "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BridgeRoomInput" } } } },
+                    "responses": {
+                        "201": { "description": "Room created or returned" },
+                        "400": { "description": "Invalid room or secret-like visible text" },
+                        "401": { "description": "Authentication failed" }
+                    }
+                }
+            },
+            "/api/v1/bridge/rooms/{room_slug}": {
+                "get": {
+                    "summary": "Read a bridge room snapshot",
+                    "security": read_security.clone(),
+                    "parameters": [{ "name": "room_slug", "in": "path", "required": true, "schema": { "type": "string" } }],
+                    "responses": {
+                        "200": { "description": "Room, participants, messages, contacts, and transport counters" },
+                        "401": { "description": "Authentication failed" },
+                        "404": { "description": "Room not found" }
+                    }
+                }
+            },
+            "/api/v1/bridge/rooms/{room_slug}/join": {
+                "post": {
+                    "summary": "Declare a participant in a bridge room",
+                    "description": "Participant identity is scoped to the authenticated local control-plane boundary; it is not a provider-issued identity assertion.",
+                    "security": ingestion_security.clone(),
+                    "parameters": [{ "name": "room_slug", "in": "path", "required": true, "schema": { "type": "string" } }],
+                    "responses": {
+                        "200": { "description": "Participant joined" },
+                        "400": { "description": "Invalid participant" },
+                        "401": { "description": "Authentication failed" }
+                    }
+                }
+            },
+            "/api/v1/bridge/rooms/{room_slug}/messages": {
+                "get": {
+                    "summary": "Read retained visible bridge summaries",
+                    "security": read_security.clone(),
+                    "parameters": [{ "name": "room_slug", "in": "path", "required": true, "schema": { "type": "string" } }],
+                    "responses": { "200": { "description": "Bounded visible message summaries" }, "401": { "description": "Authentication failed" } }
+                },
+                "post": {
+                    "summary": "Post a joined participant message over HTTP",
+                    "description": "Accepts explicit visible summaries only. Credential-like text and participant identity mismatches are rejected.",
+                    "security": ingestion_security.clone(),
+                    "parameters": [{ "name": "room_slug", "in": "path", "required": true, "schema": { "type": "string" } }],
+                    "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BridgeMessageInput" } } } },
+                    "responses": { "202": { "description": "Message accepted" }, "400": { "description": "Invalid bridge message" }, "401": { "description": "Authentication failed" } }
+                }
+            },
             "/api/v1/events": {
                 "post": {
                     "summary": "Ingest one agent event",
@@ -177,11 +238,69 @@ pub fn document(
                     }
                 }
             },
+            "/api/v1/runtime/snapshot": {
+                "get": {
+                    "summary": "Read real process and explicit hook telemetry",
+                    "security": read_security.clone(),
+                    "responses": { "200": { "description": "Current runtime snapshot" }, "401": { "description": "Authentication failed" } }
+                }
+            },
+            "/api/v1/runtime/hooks": {
+                "post": {
+                    "summary": "Ingest an explicit provider or wrapper runtime hook",
+                    "security": ingestion_security.clone(),
+                    "responses": { "202": { "description": "Hook accepted" }, "400": { "description": "Invalid or privacy-unsafe hook" }, "401": { "description": "Authentication failed" } }
+                }
+            },
+            "/api/v1/runtime/host-observations": {
+                "post": {
+                    "summary": "Ingest a privacy-minimized native host process sample",
+                    "description": "Accepts fixed process identity, lineage, CPU, and RSS fields. Command arguments, environments, prompts, and provider credentials are outside this contract.",
+                    "security": ingestion_security.clone(),
+                    "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HostProcessObservationEnvelope" } } } },
+                    "responses": { "202": { "description": "Host observation accepted" }, "400": { "description": "Invalid, future, duplicate-PID, or out-of-order observation" }, "401": { "description": "Authentication failed" } }
+                }
+            },
+            "/api/v1/runtime/collection": {
+                "post": {
+                    "summary": "Enable or pause the local Linux process collector",
+                    "security": ingestion_security.clone(),
+                    "responses": { "200": { "description": "Collector state changed" }, "401": { "description": "Authentication failed" } }
+                }
+            },
+            "/api/v1/runtime/commands": {
+                "post": {
+                    "summary": "Queue a cooperative command for a hook-capable agent",
+                    "security": ingestion_security.clone(),
+                    "responses": { "202": { "description": "Command queued" }, "409": { "description": "Agent is not control capable" }, "401": { "description": "Authentication failed" } }
+                }
+            },
+            "/api/v1/runtime/commands/poll": {
+                "post": {
+                    "summary": "Poll pending cooperative commands",
+                    "security": ingestion_security.clone(),
+                    "responses": { "200": { "description": "Pending commands" }, "401": { "description": "Authentication failed" } }
+                }
+            },
+            "/api/v1/runtime/commands/ack": {
+                "post": {
+                    "summary": "Acknowledge a cooperative command",
+                    "security": ingestion_security.clone(),
+                    "responses": { "200": { "description": "Command acknowledgement recorded" }, "401": { "description": "Authentication failed" }, "404": { "description": "Command not found" } }
+                }
+            },
+            "/ws/bridge/{room_slug}": {
+                "get": {
+                    "summary": "Authenticated bridge room WebSocket",
+                    "description": "Send authentication first, join a declared participant, then exchange visible bridge summaries and room updates.",
+                    "security": ingestion_security.clone()
+                }
+            },
             "/ws/agent": {
                 "get": {
                     "summary": "WebSocket agent ingestion",
                     "description": "Authenticate during the WebSocket upgrade with a Bearer header or token query parameter, then send EventEnvelope JSON messages.",
-                    "security": ingestion_security
+                    "security": ingestion_security.clone()
                 }
             },
             "/ws/ui": {
@@ -284,6 +403,24 @@ pub fn document(
                 "CoordinationPlan": {
                     "type": "object",
                     "description": "Deterministic read-only plan containing bounded assignments, interventions, held tasks, planning policies, and source-event provenance."
+                },
+                "BridgeRoomInput": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["slug", "title", "objective"],
+                    "properties": {
+                        "slug": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$" },
+                        "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+                        "objective": { "type": "string", "minLength": 1, "maxLength": 2048 }
+                    }
+                },
+                "BridgeMessageInput": {
+                    "type": "object",
+                    "description": "A credential-filtered visible summary from an already joined participant. Hidden reasoning and raw prompts are outside the contract."
+                },
+                "HostProcessObservationEnvelope": {
+                    "type": "object",
+                    "description": "A bounded native process sample containing no command arguments, environment variables, prompts, or credentials."
                 }
             }
         },

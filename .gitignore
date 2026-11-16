@@ -24,3 +24,10 @@ node_modules/
 /env/enc/*
 !/env/enc/dev.env.enc
 !/env/enc/prod.env.enc
+
+# Repository-local temporary data and authorized Git worktrees
+tmp/worktrees
+temp/worktrees
+# Sanctioned scratch locations - AGENTS.md requires both, trailing-slash form
+tmp/
+temp/

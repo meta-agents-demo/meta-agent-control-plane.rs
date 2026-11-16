@@ -14,7 +14,7 @@ pub fn dashboard(reads_protected: bool) -> String {
                     <h1>"Explainable metacognition"</h1>
                     <p class="lede">"Deterministic progress, dependency, evidence, and retry diagnostics derived only from visible retained state."</p>
                 </div>
-                <nav aria-label="Analytics views"><a href="/">"Overview"</a><a href="/runtime">"Runtime"</a><a href="/explorer">"Explorer"</a><a href="/coordination">"Coordination"</a></nav>
+                <nav aria-label="Analytics views"><a href="/">"Overview"</a><a href="/bridge">"Bridge"</a><a href="/runtime">"Runtime"</a><a href="/explorer">"Explorer"</a><a href="/coordination">"Coordination"</a></nav>
             </header>
 
             <section class="toolbar panel">

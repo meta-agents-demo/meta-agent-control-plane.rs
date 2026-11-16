@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,7 @@ const MAX_METADATA_ENTRIES: usize = 32;
 const MAX_METADATA_KEY_BYTES: usize = 128;
 const MAX_METADATA_VALUE_BYTES: usize = 1_024;
 const MAX_CPU_PERCENT: f64 = 100_000.0;
+const MAX_HOST_PROCESSES: usize = 512;
 const FORBIDDEN_METADATA_KEY_FRAGMENTS: &[&str] = &[
     "authorization",
     "chain_of_thought",
@@ -232,9 +233,15 @@ pub struct ControlCommand {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RuntimeProcessTelemetry {
     pub pid: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ppid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pgid: Option<u32>,
     pub provider: String,
     pub process_name: String,
     pub matched_pattern: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_role: Option<String>,
     pub process_state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cpu_percent: Option<f64>,
@@ -242,6 +249,101 @@ pub struct RuntimeProcessTelemetry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_percent: Option<f64>,
     pub observed_at: DateTime<Utc>,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observer_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    #[serde(default)]
+    pub stale: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostProcessObservation {
+    pub pid: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ppid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pgid: Option<u32>,
+    pub provider: String,
+    pub process_name: String,
+    pub process_role: String,
+    pub process_state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_percent: Option<f64>,
+    pub rss_bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_percent: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostProcessObservationEnvelope {
+    pub protocol_version: String,
+    pub observation_id: Uuid,
+    pub observed_at: DateTime<Utc>,
+    pub observer_id: String,
+    pub host_id: String,
+    pub platform: String,
+    pub processes: Vec<HostProcessObservation>,
+}
+
+impl HostProcessObservationEnvelope {
+    pub fn validate(&self) -> Result<(), RuntimeError> {
+        if self.protocol_version != RUNTIME_PROTOCOL_VERSION {
+            return Err(RuntimeError::UnsupportedProtocol);
+        }
+        if self.observation_id.is_nil() {
+            return Err(RuntimeError::InvalidField("observation_id"));
+        }
+        if self.observed_at > Utc::now() + chrono::Duration::minutes(5) {
+            return Err(RuntimeError::InvalidField("observed_at"));
+        }
+        validate_text("observer_id", &self.observer_id, 256)?;
+        validate_text("host_id", &self.host_id, 256)?;
+        validate_text("platform", &self.platform, 128)?;
+        if self.processes.len() > MAX_HOST_PROCESSES {
+            return Err(RuntimeError::TooManyHostProcesses);
+        }
+        let mut process_ids = HashSet::with_capacity(self.processes.len());
+        for process in &self.processes {
+            if process.pid == 0 {
+                return Err(RuntimeError::InvalidField("process.pid"));
+            }
+            if !process_ids.insert(process.pid) {
+                return Err(RuntimeError::InvalidField("process.pid"));
+            }
+            validate_text("process.provider", &process.provider, 128)?;
+            validate_text("process.process_name", &process.process_name, 256)?;
+            validate_text("process.process_role", &process.process_role, 128)?;
+            validate_text("process.process_state", &process.process_state, 64)?;
+            if process.cpu_percent.is_some_and(|value| {
+                !value.is_finite() || !(0.0..=MAX_CPU_PERCENT).contains(&value)
+            }) {
+                return Err(RuntimeError::InvalidField("process.cpu_percent"));
+            }
+            if process
+                .memory_percent
+                .is_some_and(|value| !value.is_finite() || !(0.0..=100.0).contains(&value))
+            {
+                return Err(RuntimeError::InvalidField("process.memory_percent"));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HostObserverStatus {
+    pub observer_id: String,
+    pub host_id: String,
+    pub platform: String,
+    pub last_observed_at: DateTime<Utc>,
+    pub process_count: usize,
+    pub stale: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -284,6 +386,7 @@ pub struct RuntimeAgentTelemetry {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct RuntimeTotals {
     pub agents: usize,
+    pub observed_processes: usize,
     pub process_backed_agents: usize,
     pub hook_backed_agents: usize,
     pub cpu_percent: f64,
@@ -319,6 +422,7 @@ pub struct RuntimeSnapshot {
     pub totals: RuntimeTotals,
     pub agents: Vec<RuntimeAgentTelemetry>,
     pub processes: Vec<RuntimeProcessTelemetry>,
+    pub host_observers: Vec<HostObserverStatus>,
     pub recent_hooks: Vec<RuntimeHookEnvelope>,
     pub recent_commands: Vec<ControlCommand>,
 }
@@ -337,6 +441,12 @@ pub enum RuntimeError {
     ForbiddenMetadataKey,
     #[error("runtime hook event has already been accepted")]
     DuplicateHook,
+    #[error("host process observation has already been accepted")]
+    DuplicateHostObservation,
+    #[error("host process observation contains too many processes")]
+    TooManyHostProcesses,
+    #[error("host process observation is older than the current observer sample")]
+    OutOfOrderHostObservation,
     #[error("control command was not found")]
     CommandNotFound,
     #[error("agent has not established a cooperative runtime hook channel")]
